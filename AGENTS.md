@@ -4,9 +4,9 @@ Local static placement calculator. Hero output is a `-filter_complex` string. Th
 
 Read this before changing `js/ffmpeg.js`, preview geometry, state, or `computeCommand`. The spec (frozen goldens, module contracts, UI ids) is [DESIGN.md](DESIGN.md). User-facing how-to is [README.md](README.md). Command / smoke-test notes are [docs/notes.md](docs/notes.md). Do not copy those documents here.
 
-Load order in `index.html`: `state.js` → `ffmpeg.js` → `preview.js` → `modal.js` → `main.js`. Classic `<script src>` on `window.WM`.
+Load order in `index.html`: `state.js` → `ffmpeg.js` → `preview.js` → `modal.js` → `main.js`. Classic `<script src>` on `window.WM`. Cache-bust those (and CSS / icons / `site.webmanifest`) with `?v=` on the URL; bump the query when shipping a change to any of them.
 
-Related but separate product: [ffmpeg.party](https://github.com/a5ah1/ffmpeg-party) (x264 wizard at `/tools/x264-wizard/`). Audio/metadata flags were ported from that wizard. A local clone, if present, is `_tmp/ffmpeg-party` and must not be committed (`_tmp/` is gitignored).
+Related but separate product: [ffmpeg.party](https://github.com/a5ah1/ffmpeg-party) (x264 wizard at `/tools/x264-wizard/`). Audio/metadata flags were ported from that wizard. That repo is not a dependency. Scratch checkouts belong outside this tree (`_tmp/` is gitignored).
 
 ## Stack that is easy to break
 

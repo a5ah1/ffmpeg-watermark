@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | **Title** | FFmpeg Watermark Placement Prototype (local static web tool) |
-| **Author** | Solo implementer |
+| **Author** | a5ah1 |
 | **Date** | 2026-08-16 |
 | **Status** | v1 spec (implemented) + libx264 command slice (audio, metadata) |
 | **Audience** | Local user; future implementer |
