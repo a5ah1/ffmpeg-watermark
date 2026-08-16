@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FFmpeg Watermark Placement</title>
+  <meta name="description" content="Local placement desk. Drop a frame, place a logo, copy an FFmpeg filter. Does not run FFmpeg or upload files." />
+  <meta name="application-name" content="FFmpeg Watermark" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#12140f" />
+  <meta name="apple-mobile-web-app-title" content="FFmpeg Watermark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <link rel="icon" href="images/favicon.ico" sizes="48x48" />
+  <link rel="icon" href="images/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="images/favicon-16.png" type="image/png" sizes="16x16" />
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="site.webmanifest" />
+
+  <link rel="canonical" href="https://a5ah1.github.io/ffmpeg-watermark/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="FFmpeg Watermark" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:url" content="https://a5ah1.github.io/ffmpeg-watermark/" />
+  <meta property="og:title" content="FFmpeg Watermark Placement" />
+  <meta property="og:description" content="Drop a frame. Place the logo. Copy a filter. Local, no upload, does not run FFmpeg." />
+  <meta property="og:image" content="https://a5ah1.github.io/ffmpeg-watermark/images/og.jpg" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="A dark desk at night: a keyboard glowing under a monitor that shows a video frame and a lime watermark box." />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="FFmpeg Watermark Placement" />
+  <meta name="twitter:description" content="Drop a frame. Place the logo. Copy a filter. Local, no upload, does not run FFmpeg." />
+  <meta name="twitter:image" content="https://a5ah1.github.io/ffmpeg-watermark/images/og.jpg" />
+  <meta name="twitter:image:alt" content="A dark desk at night: a keyboard glowing under a monitor that shows a video frame and a lime watermark box." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <main class="layout">
+    <section id="stage" tabindex="0" aria-label="Preview stage"></section>
+
+    <form id="form" autocomplete="off">
+      <header class="form-head">
+        <div class="form-brand">
+          <span class="form-mark" aria-hidden="true"></span>
+          <div>
+            <p class="kicker">Local placement desk</p>
+            <h1>FFmpeg Watermark</h1>
+          </div>
+        </div>
+        <div class="form-toolbar">
+          <div class="form-actions">
+            <button type="button" id="open-help" class="copy-btn" aria-haspopup="dialog" aria-expanded="false">Help</button>
+            <button type="button" id="open-about" class="copy-btn" aria-haspopup="dialog" aria-expanded="false">About</button>
+            <button type="button" id="open-reset" class="copy-btn danger-btn" aria-haspopup="dialog" aria-expanded="false">Reset</button>
+          </div>
+          <label class="debug-toggle">
+            <input type="checkbox" id="debug" />
+            <span>Debug</span>
+          </label>
+        </div>
+      </header>
+
+      <fieldset class="file-set" data-drop="frame">
+        <legend>Frame</legend>
+        <label class="field">
+          <span>File name</span>
+          <input id="frame-name" type="text" spellcheck="false" placeholder="frame.png" />
+        </label>
+        <label class="file-btn">
+          <input id="frame-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" />
+          <span>Choose frame</span>
+        </label>
+        <p id="frame-size" class="readout">—</p>
+        <p class="hint">FFmpeg will use these pixels. Your video must match this W×H.</p>
+      </fieldset>
+
+      <fieldset class="file-set" data-drop="wm">
+        <legend>Watermark</legend>
+        <label class="field">
+          <span>File name / second -i</span>
+          <input id="wm-name" type="text" spellcheck="false" placeholder="logo.png" />
+        </label>
+        <label class="file-btn">
+          <input id="wm-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" />
+          <span>Choose watermark</span>
+        </label>
+        <p class="hint">PNG preferred (alpha).</p>
+        <div class="readout-row">
+          <p>Native <span id="wm-native">—</span></p>
+          <p>Scaled <span id="wm-scaled">—</span></p>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Geometry</legend>
+        <div class="num-grid">
+          <label class="field">
+            <span>X</span>
+            <input id="x" type="number" step="1" />
+          </label>
+          <label class="field">
+            <span>Y</span>
+            <input id="y" type="number" step="1" />
+          </label>
+          <label class="field field-span">
+            <span>Scale (1.000 = native)</span>
+            <input id="scale" type="number" min="0.01" max="8" step="0.001" />
+          </label>
+        </div>
+        <label class="field">
+          <span>Opacity <em id="opacity-readout">80%</em></span>
+          <input id="opacity" type="range" min="0" max="100" value="80" />
+        </label>
+        <label class="field">
+          <span>Blend</span>
+          <select id="blend"></select>
+        </label>
+        <p id="blend-note" class="hint blend-note" hidden>Preview blend is CSS and is not pixel-identical to FFmpeg (gamma / color space).</p>
+        <div id="presets" class="presets" role="group" aria-label="Position presets"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Command paths</legend>
+        <label class="field">
+          <span>Video input</span>
+          <input id="video-name" type="text" spellcheck="false" placeholder="INPUT_VIDEO" />
+        </label>
+        <label class="field">
+          <span>Output</span>
+          <input id="output-name" type="text" spellcheck="false" placeholder="OUTPUT" />
+        </label>
+      </fieldset>
+
+      <fieldset class="encode-set">
+        <legend>Encode</legend>
+        <p id="encode-summary" class="readout">libx264 · CRF 23 · medium · audio copy</p>
+        <button type="button" id="open-encode" class="copy-btn" aria-haspopup="dialog" aria-expanded="false">Encode settings</button>
+        <p class="hint">libx264, audio, range, metadata. Paths stay above. Graph and command stay below.</p>
+      </fieldset>
+
+      <fieldset class="out-set">
+        <legend>Filter graph</legend>
+        <textarea id="filter-out" readonly rows="5" spellcheck="false"></textarea>
+        <button type="button" id="copy-filter" class="copy-btn">Copy</button>
+      </fieldset>
+
+      <fieldset class="out-set">
+        <legend>Full command</legend>
+        <textarea id="command-out" readonly rows="5" spellcheck="false"></textarea>
+        <button type="button" id="copy-command" class="copy-btn">Copy</button>
+      </fieldset>
+
+      <p id="status" role="status"></p>
+    </form>
+  </main>
+
+  <dialog id="modal" class="modal" aria-labelledby="modal-title">
+    <div class="modal-sheet">
+      <div class="modal-chrome">
+        <div class="modal-head">
+          <p class="kicker" id="modal-kicker">Panel</p>
+          <h2 id="modal-title">Title</h2>
+        </div>
+        <button type="button" id="modal-close" class="copy-btn" aria-label="Close">Close</button>
+      </div>
+      <div id="modal-body" class="modal-body">
+        <div id="panel-encode" hidden data-modal-panel="encode">
+          <fieldset>
+            <legend>Video</legend>
+            <div class="num-grid">
+              <label class="field">
+                <span>CRF</span>
+                <input id="encode-crf" type="number" min="0" max="51" step="1" />
+              </label>
+              <label class="field">
+                <span>Preset</span>
+                <select id="encode-preset"></select>
+              </label>
+            </div>
+            <label class="field">
+              <span>Tune</span>
+              <select id="encode-tune"></select>
+            </label>
+            <label class="field">
+              <span>Source fps hint</span>
+              <select id="encode-fps"></select>
+            </label>
+            <p class="hint">Does not change frame rate. Sets keyint to 10× fps and aq-mode=2.</p>
+          </fieldset>
+          <fieldset>
+            <legend>Audio</legend>
+            <label class="field">
+              <span>Codec</span>
+              <select id="encode-audio"></select>
+            </label>
+            <p class="hint" id="encode-audio-hint">Copy is lossless. Omit on video-only files. libfdk_aac needs a custom FFmpeg build.</p>
+            <div id="encode-audio-mode-row" class="field" hidden>
+              <span>Mode</span>
+              <div class="check-row">
+                <label class="radio"><input type="radio" name="encode-audio-mode" id="encode-audio-mode-vbr" value="vbr" /><span>VBR</span></label>
+                <label class="radio"><input type="radio" name="encode-audio-mode" id="encode-audio-mode-cbr" value="cbr" /><span>CBR</span></label>
+              </div>
+            </div>
+            <label class="field" id="encode-audio-bitrate-field" hidden>
+              <span>Bitrate (−b:a)</span>
+              <input id="encode-audio-bitrate" type="text" spellcheck="false" placeholder="192k" />
+              <span class="hint">128k mono · 192k stereo · 384k 5.1</span>
+            </label>
+            <label class="field" id="encode-audio-quality-field" hidden>
+              <span>VBR quality</span>
+              <input id="encode-audio-quality" type="number" />
+              <span class="hint" id="encode-audio-quality-hint">quality setting for VBR</span>
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Range</legend>
+            <div class="num-grid">
+              <label class="field">
+                <span>In (−ss)</span>
+                <input id="encode-in" type="text" spellcheck="false" placeholder="1:30 or 90" />
+              </label>
+              <label class="field">
+                <span>Out (−to)</span>
+                <input id="encode-to" type="text" spellcheck="false" placeholder="2:45 or 165" />
+              </label>
+            </div>
+            <p class="hint">Applies to the video input only. Input seek — not frame-accurate. Semicolons become colons.</p>
+          </fieldset>
+          <fieldset>
+            <legend>Metadata</legend>
+            <label class="check">
+              <input type="checkbox" id="encode-strip-meta" />
+              <span>strip existing metadata first (−map_metadata −1)</span>
+            </label>
+            <div class="num-grid">
+              <label class="field">
+                <span>Title</span>
+                <input id="encode-meta-title" type="text" spellcheck="false" placeholder="My video" />
+              </label>
+              <label class="field">
+                <span>Year</span>
+                <input id="encode-meta-year" type="text" spellcheck="false" placeholder="2026" inputmode="numeric" />
+              </label>
+            </div>
+            <label class="field">
+              <span>Description</span>
+              <input id="encode-meta-description" type="text" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Comment</span>
+              <input id="encode-meta-comment" type="text" spellcheck="false" />
+            </label>
+            <p class="hint">Empty fields are omitted. x264 already writes encoder info. Tuned for MP4.</p>
+          </fieldset>
+        </div>
+        <div id="panel-help" hidden data-modal-panel="help">
+          <ol class="help-steps">
+            <li>Drop a frame still. Video W×H must match that still.</li>
+            <li>Drop a watermark. Drag, resize, or use the 3×3 presets.</li>
+            <li>Set opacity and blend if needed. Preview blend is CSS, not a proof.</li>
+            <li>Paste video and output paths. Encode settings live in the panel.</li>
+            <li>Copy the filter graph, or the full command, and run it in a shell.</li>
+          </ol>
+          <p class="hint">This page does not run FFmpeg. Use audio omit when the source has no audio. libfdk_aac needs a custom build. Do not add CLI <code>-loop 1</code> or <code>-shortest</code>.</p>
+        </div>
+        <div id="panel-about" hidden data-modal-panel="about">
+          <p>Drop a frame. Place the logo. Copy a filter. This page never runs FFmpeg, never uploads files, and works from <code>file://</code> or a static server.</p>
+          <p>The preview is source pixels of the dropped frame, letterboxed into the stage. Large frames scale down to the stage; they do not grow it.</p>
+          <p>This tab keeps your current fields and images in session storage until you close the tab or press Reset. Nothing is written to disk or sent anywhere.</p>
+          <p class="about-links">
+            <a href="https://github.com/a5ah1/ffmpeg-watermark" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+            ·
+            <a href="https://a5ah1.github.io/ffmpeg-watermark/" target="_blank" rel="noopener noreferrer">Hosted page</a>
+          </p>
+          <p class="hint">Debug logs <code>setState</code> and generated strings to the browser console. Also <code>?debug=1</code>.</p>
+        </div>
+        <div id="panel-reset" hidden data-modal-panel="reset">
+          <p>Clear the frame, watermark, geometry, encode settings, and this tab’s saved data? This cannot be undone.</p>
+          <div class="form-actions reset-actions">
+            <button type="button" id="cancel-reset" class="copy-btn">Cancel</button>
+            <button type="button" id="confirm-reset" class="copy-btn danger-btn">Reset this tab</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="js/state.js"></script>
+  <script src="js/ffmpeg.js"></script>
+  <script src="js/preview.js"></script>
+  <script src="js/modal.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

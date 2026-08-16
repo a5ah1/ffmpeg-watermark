@@ -1,0 +1,41 @@
+# Notes
+
+Operator and maintainer details that do not belong on the front of [README.md](../README.md). Fine to publish.
+
+## Generated command
+
+Encode settings (CRF, preset, tune, source-fps keyint, in/out, audio, metadata) live in **Encode settings**. They do not change the filter graph.
+
+- The source-fps hint does **not** change output frame rate. It only sets `keyint=10×fps` and `aq-mode=2`.
+- In/out points (`-ss` / `-to`) apply to the video input only. They are a fast input seek, not frame-accurate.
+- Audio default is **copy**. Choose **omit** when the source has no audio. Native `aac` VBR uses `-q:a` (0.1–2, experimental). `libfdk_aac` VBR uses `-vbr` 1–5 and needs a custom FFmpeg build. CBR is `-b:a` for either codec.
+- Metadata strip/title/description/comment/year are optional and apply to the output file.
+- Do **not** add CLI `-loop 1` or CLI `-shortest`. A still second input is held for the whole video by overlay `repeatlast=1`.
+- Non-normal blend modes use an in-graph `loop=loop=-1:size=1` plus `blend=…:shortest=1`. Those are filter options, not input flags.
+- `-pix_fmt yuv420p` is an encoder flag so the result plays in common players. It is not part of the copied graph.
+
+The copied command is a double-quoted cmd / POSIX template. PowerShell may still need `cmd` or `--%`.
+
+## Blend-mode smoke test
+
+Paste a generated multiply (or other non-normal) graph onto a **multi-frame** clip:
+
+```
+ffmpeg -i video.mp4 -i logo.png -filter_complex "…" -c:a copy out.mp4
+```
+
+Play the result and confirm motion continues **under** the logo, and that the encode completes. A still-on-still encode cannot catch a frozen-frame bug. Preview blend is CSS (`mix-blend-mode`) and is not pixel-identical to FFmpeg.
+
+## GIF
+
+Accepted as a still. The browser may animate the preview; FFmpeg may decode more than one frame. Treat GIF as static.
+
+## Tests
+
+Open `js/ffmpeg.test.html` the same way as the app. Every row should read PASS.
+
+When adding a generator case, assert the **full string**, not `indexOf`. Compare object fields, not `JSON.stringify` (key order is not part of the contract). The HTML page is the runner; there is no Node test runner.
+
+## Debug
+
+Check **Debug** or open with `?debug=1` for `console.debug` snapshots of state and generated strings. `?modal=encode`, `?modal=help`, `?modal=about`, or `?modal=reset` opens that panel after first render.

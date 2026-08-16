@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WM tests</title>
+  <style>
+    body { font: 14px/1.4 ui-monospace, Consolas, monospace; background: #111; color: #ddd; margin: 24px; }
+    .pass { color: #b6ff3e; }
+    .fail { color: #ff6b4a; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>ffmpeg.test</h1>
+  <ol id="out"></ol>
+  <script src="state.js"></script>
+  <script src="ffmpeg.js"></script>
+  <script>
+    (function () {
+      var out = document.getElementById("out");
+      var failed = 0;
+      function eq(a, b) {
+        if (a === b) return true;
+        if (!a || !b || typeof a !== "object") return false;
+        var keys = Object.keys(a);
+        if (keys.length !== Object.keys(b).length) return false;
+        return keys.every(function (k) { return a[k] === b[k]; });
+      }
+      WM.assert = function (name, cond) {
+        var li = document.createElement("li");
+        li.className = cond ? "pass" : "fail";
+        li.textContent = (cond ? "PASS" : "FAIL") + " — " + name;
+        out.appendChild(li);
+        if (!cond) failed += 1;
+      };
+      function deep(name, got, exp) { WM.assert(name, eq(got, exp)); }
+
+      WM.assert("1 roundInt 1.4", WM.roundInt(1.4) === 1);
+      WM.assert("1 roundInt 1.5", WM.roundInt(1.5) === 2);
+      WM.assert("1 roundInt -1.5", WM.roundInt(-1.5) === -1);
+      WM.assert("1 roundInt NaN", WM.roundInt(NaN) === 0);
+
+      WM.assert("2 clampScale 0", WM.clampScale(0) === 0.01);
+      WM.assert("2 clampScale 9", WM.clampScale(9) === 8);
+      WM.assert("2 clampScale 1.2346", WM.clampScale(1.2346) === 1.235);
+
+      deep("3 scaledSize 0.8", WM.scaledSize(300, 100, 0.8), { w: 240, h: 80 });
+
+      deep("4 defaultPlacement fit", WM.defaultPlacement(1920, 1080, 240, 80), { x: 1656, y: 976, scale: 1 });
+      deep("5 defaultPlacement downscale", WM.defaultPlacement(320, 180, 800, 200), { scale: 0.34, x: 24, y: 88 });
+
+      var br = WM.presetPosition("BR", 1920, 1080, 240, 80);
+      var def = WM.defaultPlacement(1920, 1080, 240, 80);
+      WM.assert("6 preset BR matches default", br.x === def.x && br.y === def.y);
+      deep("7 preset C", WM.presetPosition("C", 1920, 1080, 240, 80), { x: 840, y: 500 });
+
+      WM.assert("8 accept png", WM.acceptFile({ name: "a.png", type: "image/png" }).ok);
+      WM.assert("8 reject svg", !WM.acceptFile({ name: "a.svg", type: "image/svg+xml" }).ok);
+      WM.assert("8 reject mp4", !WM.acceptFile({ name: "a.mp4", type: "video/mp4" }).ok);
+      WM.assert("8 reject bmp", !WM.acceptFile({ name: "a.bmp", type: "image/bmp" }).ok);
+
+      WM.assert("9 quote windows", WM.quoteArg("C:\\media\\logo.png") === '"C:\\media\\logo.png"');
+      WM.assert("9 quote quote", WM.quoteArg('say "hi"') === '"say \\"hi\\""');
+
+      WM.assert("10 missing frame", WM.computeFilterGraph({ watermark: { nativeWidth: 10, nativeHeight: 10 } }).ok === false);
+
+      function st(extra) {
+        var s = {
+          frame: { width: 1920, height: 1080, objectUrl: "x" },
+          watermark: { nativeWidth: 240, nativeHeight: 80, objectUrl: "y" },
+          x: 1680, y: 980, scale: 1, opacity: 1, blend: "normal", wmName: "", videoName: "", outputName: ""
+        };
+        Object.assign(s, extra);
+        return s;
+      }
+
+      WM.assert("11 overlay only", WM.computeFilterGraph(st()).filter === "[0:v][1:v]overlay=x=1680:y=980:format=auto");
+      WM.assert("12 opacity only", WM.computeFilterGraph(st({ opacity: 0.8 })).filter ===
+        "[1:v]format=rgba,colorchannelmixer=aa=0.8[wm];[0:v][wm]overlay=x=1680:y=980:format=auto");
+      WM.assert("13 scale only", WM.computeFilterGraph(st({
+        watermark: { nativeWidth: 300, nativeHeight: 100, objectUrl: "y" }, scale: 0.8
+      })).filter === "[1:v]scale=240:80[wm];[0:v][wm]overlay=x=1680:y=980:format=auto");
+
+      var goldA = "[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
+      WM.assert("14 golden A", WM.computeFilterGraph(st({
+        watermark: { nativeWidth: 300, nativeHeight: 100, objectUrl: "y" },
+        scale: 0.8, opacity: 0.8, blend: "multiply"
+      })).filter === goldA);
+
+      deep("15 intersectCrop", WM.intersectCrop(-10, 10, 100, 50, 1920, 1080),
+        { cropX: 10, cropY: 0, cropW: 90, cropH: 50, outX: 0, outY: 10 });
+
+      var a = WM.getContainedRect(800, 450, 1920, 1080);
+      WM.assert("16a viewScale", a.viewScale === 800 / 1920 && a.left === 0 && a.top === 0);
+      var pa = WM.mapPointerToSource(0, 0, { left: 0, top: 0 }, a, 1920, 1080);
+      WM.assert("16a origin", pa.x === 0 && pa.y === 0);
+      var b = WM.getContainedRect(800, 800, 1920, 1080);
+      WM.assert("16b letterbox", b.viewScale === 800 / 1920 && b.width === 800 && b.height === 450 && b.left === 0 && b.top === 175);
+      var pb = WM.mapPointerToSource(400, 175 + 225, { left: 0, top: 0 }, b, 1920, 1080);
+      WM.assert("16b center", pb.x === 960 && pb.y === 540);
+
+      var cmd = WM.computeCommand(st(), "GRAPH");
+      WM.assert("17 default command", cmd ===
+        'ffmpeg -i "INPUT_VIDEO" -i "WATERMARK" -filter_complex "GRAPH" -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy "OUTPUT"');
+
+      var cmdFull = WM.computeCommand(st({
+        videoName: "clip.mp4",
+        wmName: "logo.png",
+        outputName: "out.mp4",
+        encode: {
+          crf: 21,
+          preset: "slow",
+          tune: "film",
+          fpsPreset: "30",
+          audio: "none",
+          inPoint: "1;30",
+          outPoint: "2:45"
+        }
+      }), "[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8[wm];[0:v][wm]overlay=x=1680:y=980:format=auto");
+      WM.assert("17b encode command", cmdFull ===
+        'ffmpeg -ss 1:30 -to 2:45 -i "clip.mp4" -i "logo.png" -filter_complex "[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8[wm];[0:v][wm]overlay=x=1680:y=980:format=auto" -c:v libx264 -crf 21 -preset slow -tune film -pix_fmt yuv420p -x264-params "keyint=300:aq-mode=2" "out.mp4"');
+
+      WM.assert("17c formatTime", WM.formatTime(" 1;30 ") === "1:30" && WM.formatTime("") === "" && WM.formatTime(null) === "");
+      WM.assert("17d x264ParamsForFps", WM.x264ParamsForFps("24") === "keyint=240:aq-mode=2" && WM.x264ParamsForFps("30") === "keyint=300:aq-mode=2" && WM.x264ParamsForFps("60") === "keyint=600:aq-mode=2" && WM.x264ParamsForFps("") === "" && WM.x264ParamsForFps("99") === "");
+      WM.assert("17e encodeSummary", WM.encodeSummary(WM.createEncodeState()) === "libx264 · CRF 23 · medium · audio copy");
+      WM.assert("17f missing encode", WM.computeCommand({ videoName: "", wmName: "", outputName: "" }, "GRAPH") === cmd);
+      WM.assert("17g clamp encode", WM.computeCommand(st({
+        encode: { crf: 99, preset: "placebo", tune: "stillimage", fpsPreset: "", audio: "copy", inPoint: "", outPoint: "" }
+      }), "GRAPH") === cmd.replace("-crf 23", "-crf 51"));
+
+      var cmdAac = WM.computeCommand(st({
+        encode: { crf: 23, preset: "medium", tune: "", fpsPreset: "", audio: "aac", audioMode: "cbr", audioBitrate: "192k", audioQuality: "", inPoint: "", outPoint: "" }
+      }), "GRAPH");
+      WM.assert("17h aac cbr", cmdAac ===
+        'ffmpeg -i "INPUT_VIDEO" -i "WATERMARK" -filter_complex "GRAPH" -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k "OUTPUT"');
+
+      var cmdFdk = WM.computeCommand(st({
+        videoName: "clip.mp4",
+        wmName: "logo.png",
+        outputName: "out.mp4",
+        encode: {
+          crf: 21, preset: "slow", tune: "", fpsPreset: "",
+          audio: "libfdk_aac", audioMode: "vbr", audioBitrate: "192k", audioQuality: 5,
+          inPoint: "", outPoint: "",
+          stripMetadata: true, metaTitle: "Hi", metaDescription: "", metaComment: "", metaYear: "2026"
+        }
+      }), "GRAPH");
+      WM.assert("17i libfdk vbr meta", cmdFdk ===
+        'ffmpeg -i "clip.mp4" -i "logo.png" -filter_complex "GRAPH" -c:v libx264 -crf 21 -preset slow -pix_fmt yuv420p -c:a libfdk_aac -vbr 5 -map_metadata -1 -metadata title="Hi" -metadata year="2026" "out.mp4"');
+
+      WM.assert("17j audio helpers",
+        WM.buildAudioFlags({ audio: "aac", audioMode: "vbr", audioQuality: "" }).join(" ") === "-c:a aac -q:a 2" &&
+        WM.buildAudioFlags({ audio: "libfdk_aac", audioMode: "vbr", audioQuality: 3 }).join(" ") === "-c:a libfdk_aac -vbr 3" &&
+        WM.clampAudioQuality("aac", 5) === 2 &&
+        WM.clampAudioQuality("libfdk_aac", 0) === 1);
+
+      WM.assert("18 needsScale 1", WM.needsScale(1, 240, 80) === false);
+
+      var goldB = "[1:v]format=rgba,colorchannelmixer=aa=0.8,crop=90:50:10:0,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=90:50:0:10,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=0:y=10:format=auto";
+      WM.assert("19 golden B", WM.computeFilterGraph(st({
+        watermark: { nativeWidth: 100, nativeHeight: 50, objectUrl: "y" },
+        x: -10, y: 10, scale: 1, opacity: 0.8, blend: "multiply"
+      })).filter === goldB);
+
+      var goldC = "[1:v]format=rgba,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
+      WM.assert("20 golden C", WM.computeFilterGraph(st({ opacity: 1, blend: "multiply" })).filter === goldC);
+
+      WM.assert("21 clampCrf", WM.clampCrf(NaN) === 23 && WM.clampCrf(-1) === 0 && WM.clampCrf(51.4) === 51 && WM.clampCrf(18.2) === 18);
+      WM.assert("21 normalize", WM.normalizePreset("placebo") === "medium" && WM.normalizeTune("film") === "film" && WM.normalizeTune("psnr") === "" && WM.normalizeAudio("none") === "none" && WM.normalizeAudio("libfdk_aac") === "libfdk_aac" && WM.normalizeAudioMode("cbr") === "cbr");
+
+      var before = WM.getState().encode.preset;
+      WM.patchEncode({ crf: 18 });
+      var enc = WM.getState().encode;
+      WM.assert("22 patchEncode", enc.crf === 18 && enc.preset === before && enc.audio === "copy");
+      WM.patchEncode(WM.createEncodeState());
+
+      var snap = WM.snapshotSession({
+        frameName: "f.png",
+        wmName: "logo.png",
+        x: 10.4,
+        y: 20.6,
+        scale: 0.5,
+        opacity: 0.8,
+        blend: "multiply",
+        videoName: "in.mp4",
+        outputName: "out.mp4",
+        encode: { crf: 18, preset: "slow" },
+        debug: true,
+        selected: true,
+        frame: { width: 1920, height: 1080, objectUrl: "blob:x" },
+        watermark: { nativeWidth: 100, nativeHeight: 50, objectUrl: "blob:y" }
+      });
+      WM.assert("23 snapshot drops selected and urls", snap.selected == null && snap.frame.objectUrl == null && snap.frame.width === 1920 && snap.watermark.nativeWidth === 100);
+      WM.assert("23 snapshot fields", snap.x === 10 && snap.y === 21 && snap.blend === "multiply" && snap.encode.crf === 18 && snap.encode.preset === "slow" && snap.encode.audio === "copy");
+      var restored = WM.stateFromSession(snap);
+      WM.assert("23 restore no images", restored.frame === null && restored.watermark === null && restored.selected === false);
+      WM.assert("23 restore fields", restored.x === 10 && restored.wmName === "logo.png" && restored.encode.crf === 18 && restored.encode.audio === "copy" && restored.opacity === 0.8);
+      var withImgs = WM.stateFromSession(snap, { frame: "data:frame", watermark: "data:wm" });
+      WM.assert("23 restore images", withImgs.frame.objectUrl === "data:frame" && withImgs.frame.width === 1920 && withImgs.watermark.objectUrl === "data:wm");
+      WM.assert("23 bad session", WM.stateFromSession(null).opacity === 0.8 && WM.stateFromSession({ v: 2 }).frameName === "");
+      WM.assert("23 normalizeBlend", WM.normalizeBlend("screen") === "screen" && WM.normalizeBlend("nope") === "normal");
+
+      document.title = (failed ? failed + " failed" : "all pass") + " — ffmpeg.test";
+    })();
+  </script>
+</body>
+</html>
