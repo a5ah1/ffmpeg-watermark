@@ -13,7 +13,7 @@
 <body>
   <h1>ffmpeg.test</h1>
   <ol id="out"></ol>
-  <script src="state.js?v=1"></script>
+  <script src="state.js?v=2"></script>
   <script src="ffmpeg.js?v=1"></script>
   <script>
     (function () {
@@ -48,6 +48,15 @@
 
       deep("4 defaultPlacement fit", WM.defaultPlacement(1920, 1080, 240, 80), { x: 1656, y: 976, scale: 1 });
       deep("5 defaultPlacement downscale", WM.defaultPlacement(320, 180, 800, 200), { scale: 0.34, x: 24, y: 88 });
+      deep("5b defaultPlacement same-size logo", WM.defaultPlacement(1920, 1080, 1920, 1080), { x: 60, y: 24, scale: 0.956 });
+      function placementFitsFrame(fw, fh, nw, nh) {
+        var place = WM.defaultPlacement(fw, fh, nw, nh);
+        var size = WM.scaledSize(nw, nh, place.scale);
+        return size.w <= fw && size.h <= fh;
+      }
+      WM.assert("5c oversized logo fits frame", placementFitsFrame(1920, 1080, 4000, 4000));
+      WM.assert("5d tiny frame still fits", placementFitsFrame(20, 20, 100, 100));
+      WM.assert("5e wide logo fits frame", placementFitsFrame(640, 360, 640, 50));
 
       var br = WM.presetPosition("BR", 1920, 1080, 240, 80);
       var def = WM.defaultPlacement(1920, 1080, 240, 80);
@@ -98,6 +107,11 @@
       WM.assert("16b letterbox", b.viewScale === 800 / 1920 && b.width === 800 && b.height === 450 && b.left === 0 && b.top === 175);
       var pb = WM.mapPointerToSource(400, 175 + 225, { left: 0, top: 0 }, b, 1920, 1080);
       WM.assert("16b center", pb.x === 960 && pb.y === 540);
+      var c = WM.getContainedRect(800, 450, 320, 180, 1);
+      WM.assert("16c actual no upscale", c.viewScale === 1 && c.width === 320 && c.height === 180 && c.left === 240 && c.top === 135);
+      var d = WM.getContainedRect(800, 450, 320, 180);
+      WM.assert("16d fit upscales", d.viewScale === 2.5 && d.width === 800 && d.height === 450 && d.left === 0 && d.top === 0);
+      WM.assert("16e normalizeViewMode", WM.normalizeViewMode("fit") === "fit" && WM.normalizeViewMode("actual") === "actual" && WM.normalizeViewMode("zoom") === "actual");
 
       var cmd = WM.computeCommand(st(), "GRAPH");
       WM.assert("17 default command", cmd ===
@@ -186,14 +200,21 @@
         outputName: "out.mp4",
         encode: { crf: 18, preset: "slow" },
         debug: true,
+        viewMode: "fit",
         selected: true,
         frame: { width: 1920, height: 1080, objectUrl: "blob:x" },
         watermark: { nativeWidth: 100, nativeHeight: 50, objectUrl: "blob:y" }
       });
       WM.assert("23 snapshot drops selected and urls", snap.selected == null && snap.frame.objectUrl == null && snap.frame.width === 1920 && snap.watermark.nativeWidth === 100);
+      WM.assert("23 snapshot omits viewMode", snap.viewMode == null);
       WM.assert("23 snapshot fields", snap.x === 10 && snap.y === 21 && snap.blend === "multiply" && snap.encode.crf === 18 && snap.encode.preset === "slow" && snap.encode.audio === "copy");
       var restored = WM.stateFromSession(snap);
       WM.assert("23 restore no images", restored.frame === null && restored.watermark === null && restored.selected === false);
+      WM.assert("23 viewMode stays actual", restored.viewMode === "actual");
+      var forcedFit = {};
+      Object.keys(snap).forEach(function (key) { forcedFit[key] = snap[key]; });
+      forcedFit.viewMode = "fit";
+      WM.assert("23 viewMode not restored", WM.stateFromSession(forcedFit).viewMode === "actual");
       WM.assert("23 restore fields", restored.x === 10 && restored.wmName === "logo.png" && restored.encode.crf === 18 && restored.encode.audio === "copy" && restored.opacity === 0.8);
       var withImgs = WM.stateFromSession(snap, { frame: "data:frame", watermark: "data:wm" });
       WM.assert("23 restore images", withImgs.frame.objectUrl === "data:frame" && withImgs.frame.width === 1920 && withImgs.watermark.objectUrl === "data:wm");

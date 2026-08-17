@@ -26,6 +26,10 @@ ffmpeg -i video.mp4 -i logo.png -filter_complex "…" -c:a copy out.mp4
 
 Play the result and confirm motion continues **under** the logo, and that the encode completes. A still-on-still encode cannot catch a frozen-frame bug. Preview blend is CSS (`mix-blend-mode`) and is not pixel-identical to FFmpeg.
 
+## Preview size
+
+The stage default is **1:1**: a frame smaller than the stage stays native CSS pixels. **Fit** (bar under the preview) is unconstrained contain and is not written to session storage. Large frames still scale down either way. Watermark `defaultPlacement` still scale-downs to the frame on drop; that is source pixels, not preview zoom.
+
 ## GIF
 
 Accepted as a still. The browser may animate the preview; FFmpeg may decode more than one frame. Treat GIF as static.

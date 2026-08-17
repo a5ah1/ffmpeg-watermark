@@ -95,26 +95,95 @@ h1 {
   overflow: hidden;
 }
 
-#stage {
-  position: relative;
+.stage-col {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   height: auto;
   align-self: stretch;
   margin: 16px;
-  background:
-    repeating-conic-gradient(#161910 0% 25%, #0e100c 0% 50%) 0 0 / 18px 18px;
   border: 1px solid var(--line-strong);
   outline: 1px solid rgba(214, 255, 62, 0.08);
   outline-offset: 6px;
+  background: var(--panel);
+}
+
+.stage-col:focus-within {
+  outline-color: var(--phosphor);
+}
+
+#stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  background:
+    repeating-conic-gradient(#161910 0% 25%, #0e100c 0% 50%) 0 0 / 18px 18px;
+  border: 0;
+  outline: none;
   overflow: hidden;
   touch-action: none;
   user-select: none;
 }
 
 #stage:focus {
-  outline: 1px solid var(--phosphor);
-  outline-offset: 6px;
+  outline: none;
+}
+
+.stage-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.stage-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.stage-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: #14170f;
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.stage-modes button:hover:not(:disabled) {
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+}
+
+.stage-modes button[aria-pressed="true"] {
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+}
+
+.stage-modes button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stage-readout {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .stage-hint {
@@ -580,10 +649,16 @@ dialog.modal {
     overflow: visible;
   }
 
-  #stage {
+  .stage-col {
     height: min(52vh, 420px);
     min-height: 240px;
     margin: 12px;
+  }
+
+  #stage {
+    height: auto;
+    min-height: 0;
+    margin: 0;
   }
 
   #form {

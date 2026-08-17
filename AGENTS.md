@@ -57,9 +57,9 @@ FFmpeg sees **source pixels of the dropped frame**, not CSS pixels.
 
 `.wm` is **inside** `.frame-wrap`, so its `left`/`top` are `state.x * viewScale` (not `contained.left + …`). Clip via `overflow: hidden` on the wrap.
 
-`getContainedRect` / `mapPointerToSource` live in `state.js` so the two-script test page can assert letterboxing (including a non-square stage).
+`getContainedRect` / `mapPointerToSource` live in `state.js` so the two-script test page can assert letterboxing (including a non-square stage). Optional 5th arg `maxScale`: 1:1 preview passes `1`; Fit omits it. `state.viewMode` is `"actual"` \| `"fit"` and is **not** in `snapshotSession`.
 
-`.layout` is a viewport-locked two-column grid (`height: 100%`, `overflow: hidden` on `html`/`body`). `#stage` fills the left cell (`position: relative`, `overflow: hidden`, `min-height: 0`) so a large frame cannot grow it — `getContainedRect` letterboxes into the stage box. `#form` is the only vertical scroller. Do **not** make the stage stretch to the form’s content height or the drop hint’s center falls below the fold.
+`.layout` is a viewport-locked two-column grid (`height: 100%`, `overflow: hidden` on `html`/`body`). `.stage-col` fills the left cell (column flex, `min-height: 0`). `#stage` is `flex: 1` inside it (`position: relative`, `overflow: hidden`, `min-height: 0`) so a large frame cannot grow it — `getContainedRect` letterboxes into the **stage** box, not the column. `.stage-bar` is a sibling under `#stage`; do not put view controls inside `#stage`. `#form` is the only vertical scroller. Do **not** make the stage stretch to the form’s content height or the drop hint’s center falls below the fold.
 
 Other UI landmines:
 

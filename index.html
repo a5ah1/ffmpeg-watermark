@@ -41,11 +41,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=1" />
+  <link rel="stylesheet" href="css/app.css?v=2" />
 </head>
 <body>
   <main class="layout">
-    <section id="stage" tabindex="0" aria-label="Preview stage"></section>
+    <div class="stage-col">
+      <section id="stage" tabindex="0" aria-label="Preview stage"></section>
+      <div class="stage-bar" role="toolbar" aria-label="Preview size">
+        <div class="stage-modes" role="group" aria-label="Preview size">
+          <button type="button" id="view-actual" aria-pressed="true">1:1</button>
+          <button type="button" id="view-fit" aria-pressed="false">Fit</button>
+        </div>
+        <p id="view-readout" class="stage-readout">—</p>
+      </div>
+    </div>
 
     <form id="form" autocomplete="off">
       <header class="form-head">
@@ -274,7 +283,7 @@
         </div>
         <div id="panel-about" hidden data-modal-panel="about">
           <p>Drop a frame. Place the logo. Copy a filter. This page never runs FFmpeg, never uploads files, and works from <code>file://</code> or a static server.</p>
-          <p>The preview is source pixels of the dropped frame, letterboxed into the stage. Large frames scale down to the stage; they do not grow it.</p>
+          <p>The preview is source pixels of the dropped frame. Small frames stay 1:1 CSS pixels; large frames scale down to the stage. Fit expands a small frame to fill the stage for this visit only.</p>
           <p>This tab keeps your current fields and images in session storage until you close the tab or press Reset. Nothing is written to disk or sent anywhere.</p>
           <p class="about-links">
             <a href="https://github.com/a5ah1/ffmpeg-watermark" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
@@ -294,10 +303,10 @@
     </div>
   </dialog>
 
-  <script src="js/state.js?v=1"></script>
+  <script src="js/state.js?v=2"></script>
   <script src="js/ffmpeg.js?v=1"></script>
-  <script src="js/preview.js?v=1"></script>
+  <script src="js/preview.js?v=2"></script>
   <script src="js/modal.js?v=1"></script>
-  <script src="js/main.js?v=1"></script>
+  <script src="js/main.js?v=2"></script>
 </body>
 </html>

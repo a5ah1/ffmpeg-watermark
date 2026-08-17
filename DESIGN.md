@@ -109,7 +109,7 @@ overlay=main_w-overlay_w-10:main_h-overlay_h-10
 
 2. **Vanilla classic scripts on `window.WM`, not ES modules.** Chrome blocks ES modules on `file://`. Classic `<script src>` works from disk and from a static server, and the test page can load the same files. Rationale: zero-friction open.
 
-3. **Source-pixel coordinate space, integer `x`, `y`, `scaledW`, `scaledH`.** Preview is `object-fit: contain` letterboxing. Mapping uses the computed contain-rect (`naturalWidth/Height` vs stage `getBoundingClientRect()`), **not** the `<img>` box (the box is the stage; the painted image is smaller). Rationale: FFmpeg never sees CSS pixels.
+3. **Source-pixel coordinate space, integer `x`, `y`, `scaledW`, `scaledH`.** Preview letterboxes into `#stage`. Default **1:1** never upscales (`viewScale = min(1, contain)`); **Fit** is unconstrained contain. Mapping uses the computed contain-rect (`naturalWidth/Height` vs stage `getBoundingClientRect()`), **not** the `<img>` box (the box is the stage; the painted image is smaller). `viewMode` is live-only and is not written to `sessionStorage`. Rationale: FFmpeg never sees CSS pixels; small clips should stay native-size unless the user asks to fill the stage.
 
 4. **Uniform scale factor (3 decimal places, range 0.01–8.00) + derived integer size.** No independent W/H stretch. `scale` is omitted from the graph iff `scale === 1` **and** rounded W×H equal native W×H. Rationale: drag-resize UIs that unlock aspect produce filters nobody wanted.
 
@@ -248,7 +248,8 @@ Every script attaches to `window.WM` (create if missing). No ES `export`. Functi
     metaYear: ""
   },
   selected: false,   // watermark focused for keyboard nudge
-  debug: false       // also flipped by ?debug=1
+  debug: false,      // also flipped by ?debug=1
+  viewMode: "actual" // "actual" | "fit"; live preview only, not persisted
 }
 ```
 
@@ -318,9 +319,14 @@ WM.normalizeAudioMode(value): string       // "cbr" or "vbr" (default vbr)
 WM.clampAudioQuality(codec, value): number // aac 0.1–2; libfdk 1–5; empty → default
 WM.scaledSize(nativeW, nativeH, scale): { w: number, h: number }
 
-WM.getContainedRect(stageWidth, stageHeight, frameW, frameH)
+WM.normalizeViewMode(value): string     // "fit" or "actual"
+
+WM.getContainedRect(stageWidth, stageHeight, frameW, frameH, maxScale?)
   : { left, top, width, height, viewScale }
   // viewScale = min(stageW/frameW, stageH/frameH)
+  // if maxScale is a finite number > 0: viewScale = min(viewScale, maxScale)
+  // omit / non-finite maxScale → unconstrained contain (Fit)
+  // preview 1:1 passes maxScale=1
   // width  = frameW * viewScale
   // height = frameH * viewScale
   // left   = (stageW - width) / 2
@@ -368,9 +374,10 @@ WM.revokeUrl(url: string | null): void  // revokeObjectURL only when url starts 
 WM.SESSION_KEY = "wm.v1"
 WM.normalizeBlend(value): string        // allowlist or "normal"
 WM.normalizeFpsPreset(value): string    // 24|25|30|50|60 or ""
-WM.snapshotSession(state): Object       // persistable fields + sizes; no selected; no objectUrl
+WM.snapshotSession(state): Object       // persistable fields + sizes; no selected; no objectUrl; no viewMode
 WM.stateFromSession(data, images?): State
   // images.frame / images.watermark are data-URL (or other img src) strings
+  // viewMode is always "actual" after restore
 ```
 
 `setState` is the only mutator and is **shallow**. `patchEncode` is the encode helper (copy + replace). Subscribers (preview + form + outputs) re-render from `getState()`. No deep reactive system. Name edits bind to `frameName` / `wmName` / `videoName` / `outputName` — never to a nested `.name`.
@@ -559,7 +566,7 @@ WM.renderPreview(state): void
 WM.setPreviewHandlers({ onMove, onResize, onSelect }): void
 ```
 
-Contain math lives in `state.js` (`WM.getContainedRect`, `WM.mapPointerToSource`). `renderPreview` must call those helpers with the stage element's `getBoundingClientRect()` **size** plus `frame.width/height`. Do not trust `img.getBoundingClientRect()` for the painted image: with `width:100%; height:100%; object-fit:contain` the element's box is the stage, not the letterboxed bitmap.
+Contain math lives in `state.js` (`WM.getContainedRect`, `WM.mapPointerToSource`). `renderPreview` must call those helpers with the stage element's `getBoundingClientRect()` **size** plus `frame.width/height` and `maxScale=1` unless `viewMode === "fit"`. Do not trust `img.getBoundingClientRect()` for the painted image: `#frame-img` fills `.frame-wrap`, which is already the contain-rect.
 
 Watermark box (`.wm`) is positioned in view pixels; **opacity and blend are on the image only**:
 
@@ -625,11 +632,13 @@ Responsibilities only:
 
 ### UI specification
 
-Two-column viewport layout (`display: grid`). Preview is `minmax(0, 1fr)`; form is `360px`. The page itself does not scroll: `#stage` fills the left column (`overflow: hidden`, `position: relative`) and `#form` scrolls independently. There is no page mast. A compact title lives in `.form-head` at the top of `#form`. Below `800px` viewport, stack preview on top (stage gets a fixed height).
+Two-column viewport layout (`display: grid`). Preview is `minmax(0, 1fr)`; form is `360px`. The page itself does not scroll: `.stage-col` fills the left column and `#form` scrolls independently. `#stage` is the contain / drop / drag surface inside that column; `.stage-bar` is sibling chrome under it and is not part of the contain-rect. There is no page mast. A compact title lives in `.form-head` at the top of `#form`. Below `800px` viewport, stack preview on top (`.stage-col` gets a fixed height).
 
 **The ID table below is authoritative.** The HTML skeleton in API / Interface Changes is a mount point only (`#stage` / `#form` start empty). Implement the controls listed here, not a free-form form.
 
-#### Left / top: preview stage (`#stage`)
+#### Left / top: preview (`#stage` + `.stage-bar`)
+
+`.stage-col` is the left-column chrome (border, outline, margin). Drop on the column (stage or bar) uses the same role as a stage drop.
 
 **Empty (no frame).** Full-area dashed drop zone:
 
@@ -642,12 +651,17 @@ Clicking the empty stage opens `#frame-file` (`<input type="file">`).
 **Frame loaded.** Structure:
 
 ```
-#stage                          /* position:relative; background checker or #1a1a1a */
-  .frame-wrap                   /* absolutely placed to contain-rect; overflow:hidden */
-    img#frame-img               /* width:100%; height:100%; display:block */
-    .wm                         /* position:absolute; transform-origin:top left */
-      img#wm-img
-      .handle[data-handle=nw|ne|sw|se]
+.stage-col
+  #stage                        /* position:relative; checkerboard; flex:1; contain target */
+    .frame-wrap                 /* absolutely placed to contain-rect; overflow:hidden */
+      img#frame-img             /* width:100%; height:100%; display:block */
+      .wm                       /* position:absolute; transform-origin:top left */
+        img#wm-img
+        .handle[data-handle=nw|ne|sw|se]
+  .stage-bar                    /* not part of #stage / contain-rect */
+    #view-actual                /* 1:1 — maxScale=1; default; aria-pressed */
+    #view-fit                   /* Fit — unconstrained contain; not persisted */
+    #view-readout               /* "1920 × 1080 · 47%" */
 ```
 
 - Watermark is dragged from its **body** (not a handle).
@@ -658,6 +672,7 @@ Clicking the empty stage opens `#frame-file` (`<input type="file">`).
 - Drop on a loaded stage → treat as **watermark** (not a new frame). To replace the frame, use the form's frame control.
 - `ResizeObserver` on `#stage` re-renders positions (window resize / first layout).
 - `pointerdown` on `.wm` sets `state.selected = true` **and** `stageEl.focus()` so arrow-key nudge works (`#stage` has `tabindex="0"`). Clicking `.wm` without focusing the stage is why arrows otherwise do nothing.
+- Preview default is 1:1 (`getContainedRect(…, 1)`). Fit (`#view-fit`) omits `maxScale`. `#view-actual` / `#view-fit` disabled until a frame is loaded. `viewMode` is not in `snapshotSession`.
 
 #### Right: form (`#form`)
 
@@ -868,7 +883,7 @@ No server, no schema, no migration. Live state is the in-memory object in `WM.ge
 
 This tab also writes a snapshot to `sessionStorage` under `WM.SESSION_KEY` (`wm.v1`), plus optional image data URLs at `wm.v1.frame` and `wm.v1.wm`. Closing the tab discards it. Reload in the same tab restores fields; images restore when the data URLs still decode. Quota failure drops images and keeps the field snapshot. Reset clears state and those keys.
 
-`WM.snapshotSession(state)` is the persisted shape: names, geometry, encode, debug, frame/watermark **sizes only**. No `selected`. No `blob:` URLs. `WM.stateFromSession(data, images?)` rebuilds a full initial state; images are optional data-URL strings.
+`WM.snapshotSession(state)` is the persisted shape: names, geometry, encode, debug, frame/watermark **sizes only**. No `selected`. No `blob:` URLs. No `viewMode` (always `"actual"` after restore or reload). `WM.stateFromSession(data, images?)` rebuilds a full initial state; images are optional data-URL strings.
 
 There is no `localStorage` and no cross-tab restore.
 
@@ -1022,6 +1037,7 @@ Minimum cases:
 | 3 | `scaledSize` | `300×100 @ 0.8 → 240×80` |
 | 4 | `defaultPlacement` | 1920×1080 + 240×80 native → scale 1, `x=1656`, `y=976` (24 px margin) |
 | 5 | `defaultPlacement` | 320×180 + 800×200 native → `{ scale: 0.34, x: 24, y: 88 }` (`sw=272`, `sh=68`; `maxW=272`, `maxH=132`; `min(272/800,132/200,1)=0.34`; BR with margin) |
+| 5b–e | `defaultPlacement` | same-size 1920×1080 logo → `{ x: 60, y: 24, scale: 0.956 }`; oversized / tiny-frame / wide logos still produce scaled W×H ≤ frame |
 | 6 | `presetPosition('BR')` | matches default when scale=1 and logo fits |
 | 7 | `presetPosition('C')` | centered integers |
 | 8 | `acceptFile` | `a.png` / `image/png` ok; `a.svg` reject; `a.mp4` reject; `a.bmp` reject |
@@ -1032,7 +1048,7 @@ Minimum cases:
 | 13 | `computeFilterGraph` | scale=0.8, opacity=1, normal → `scale=`, no colorchannelmixer |
 | 14 | `computeFilterGraph` | golden **A** (multiply, inside, scale+opacity) — **exact string equality** |
 | 15 | `intersectCrop` | `x=-10,y=10,sw=100,sh=50,fw=1920,fh=1080` → `{ cropX:10, cropY:0, cropW:90, cropH:50, outX:0, outY:10 }` |
-| 16 | `getContainedRect` + `mapPointerToSource` | (a) stage 800×450, frame 1920×1080 → `viewScale=800/1920`, `left=0`, `top=0`; click contain origin → `(0,0)`. (b) **letterboxed:** stage 800×800, frame 1920×1080 → `viewScale=800/1920`, `width=800`, `height=450`, `left=0`, `top=175`; click `(400, 175+225)` → source `(960, 540)` |
+| 16 | `getContainedRect` + `mapPointerToSource` | (a) stage 800×450, frame 1920×1080 → `viewScale=800/1920`, `left=0`, `top=0`; click contain origin → `(0,0)`. (b) **letterboxed:** stage 800×800, frame 1920×1080 → `viewScale=800/1920`, `width=800`, `height=450`, `left=0`, `top=175`; click `(400, 175+225)` → source `(960, 540)`. (c) **1:1:** stage 800×450, frame 320×180, `maxScale=1` → `viewScale=1`, `320×180` centered at `(240, 135)`. (d) **Fit:** same sizes, no cap → `viewScale=2.5`, fills the stage. (e) `normalizeViewMode` |
 | 17 | `computeCommand` | default encode, empty names → full string with `-c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy` |
 | 17b | `computeCommand` | `-ss 1:30` from `1;30`, tune film, 30 fps params, audio omit — **exact string** |
 | 17c–g | encode helpers | `formatTime`, `x264ParamsForFps`, `encodeSummary`, missing `encode` object, clamp/normalize fallbacks |
@@ -1044,7 +1060,7 @@ Minimum cases:
 | 20 | `computeFilterGraph` | golden **C** (multiply, opacity=1, still has `format=rgba`, no `colorchannelmixer`) — **exact string equality** |
 | 21 | `clampCrf` / normalize | NaN→23, range, `placebo`→medium, unknown tune→`""` |
 | 22 | `patchEncode` | `{ crf: 18 }` keeps `preset` / `audio` |
-| 23 | session snapshot | drops `selected` and `objectUrl`; restores fields; images optional; bad/v≠1 → defaults |
+| 23 | session snapshot | drops `selected`, `objectUrl`, and `viewMode`; restores fields; `viewMode` stays `"actual"` even if the payload has `"fit"`; images optional; bad/v≠1 → defaults |
 
 `getContainedRect` / `mapPointerToSource` live in `state.js` so the two-script test page can assert 16 without loading `preview.js`.
 

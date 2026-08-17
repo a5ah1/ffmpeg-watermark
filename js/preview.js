@@ -29,7 +29,8 @@
 
   function currentContained(state) {
     var rect = stageEl.getBoundingClientRect();
-    return WM.getContainedRect(rect.width, rect.height, state.frame.width, state.frame.height);
+    var maxScale = WM.normalizeViewMode(state.viewMode) === "fit" ? null : 1;
+    return WM.getContainedRect(rect.width, rect.height, state.frame.width, state.frame.height, maxScale);
   }
 
   WM.initPreview = function (el) {

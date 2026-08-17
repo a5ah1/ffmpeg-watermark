@@ -22,7 +22,7 @@ Then visit `http://127.0.0.1:8080/`.
 
 ## Use
 
-1. Drop a **frame still** onto the empty stage (or choose it in the form). Your video must match that W×H.
+1. Drop a **frame still** onto the empty stage (or choose it in the form). Your video must match that W×H. Small frames stay native-size on the stage; **Fit** in the bar under the preview expands them for this visit only.
 2. Drop a **watermark** (PNG preferred for alpha). JPEG, WebP, and static GIF are accepted. SVG, BMP, and video files are rejected.
 3. Drag the logo, resize from a corner (aspect locked), or use the 3×3 presets. X/Y are source pixels.
 4. Set opacity (default 80%) and, if needed, a blend mode. Preview blend is CSS and is not pixel-identical to FFmpeg.

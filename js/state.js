@@ -72,7 +72,8 @@
       outputName: "",
       encode: WM.createEncodeState(),
       selected: false,
-      debug: false
+      debug: false,
+      viewMode: "actual"
     };
   }
 
@@ -185,11 +186,18 @@
     };
   };
 
-  WM.getContainedRect = function (stageWidth, stageHeight, frameW, frameH) {
+  WM.normalizeViewMode = function (value) {
+    return value === "fit" ? "fit" : "actual";
+  };
+
+  WM.getContainedRect = function (stageWidth, stageHeight, frameW, frameH, maxScale) {
     if (!stageWidth || !stageHeight || !frameW || !frameH) {
       return { left: 0, top: 0, width: 0, height: 0, viewScale: 1 };
     }
     var viewScale = Math.min(stageWidth / frameW, stageHeight / frameH);
+    if (maxScale != null && Number.isFinite(maxScale) && maxScale > 0) {
+      viewScale = Math.min(viewScale, maxScale);
+    }
     var width = frameW * viewScale;
     var height = frameH * viewScale;
     return {

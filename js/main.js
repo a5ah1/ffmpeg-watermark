@@ -219,6 +219,27 @@
     }
     els.debug.checked = !!state.debug;
 
+    var viewMode = WM.normalizeViewMode(state.viewMode);
+    els.viewActual.setAttribute("aria-pressed", viewMode === "actual" ? "true" : "false");
+    els.viewFit.setAttribute("aria-pressed", viewMode === "fit" ? "true" : "false");
+    els.viewActual.disabled = !state.frame;
+    els.viewFit.disabled = !state.frame;
+    if (!state.frame) {
+      els.viewReadout.textContent = "—";
+    } else {
+      var stageRect = els.stage.getBoundingClientRect();
+      var maxScale = viewMode === "fit" ? null : 1;
+      var contained = WM.getContainedRect(
+        stageRect.width,
+        stageRect.height,
+        state.frame.width,
+        state.frame.height,
+        maxScale
+      );
+      els.viewReadout.textContent =
+        dim(state.frame.width, state.frame.height) + " · " + Math.round(contained.viewScale * 100) + "%";
+    }
+
     var enc = state.encode || WM.createEncodeState();
     if (document.activeElement !== els.encodeCrf) els.encodeCrf.value = String(WM.clampCrf(enc.crf));
     if (document.activeElement !== els.encodePreset) els.encodePreset.value = WM.normalizePreset(enc.preset);
@@ -533,6 +554,11 @@
     els.copyCommand = $("copy-command");
     els.status = $("status");
     els.debug = $("debug");
+    els.stage = $("stage");
+    els.stageCol = document.querySelector(".stage-col");
+    els.viewActual = $("view-actual");
+    els.viewFit = $("view-fit");
+    els.viewReadout = $("view-readout");
 
     var params = new URLSearchParams(window.location.search);
 
@@ -575,7 +601,7 @@
       showStatus("Tab reset.", 2500);
     });
 
-    var stage = $("stage");
+    var stage = els.stage;
     WM.initPreview(stage);
     WM.setPreviewHandlers({
       onMove: function (x, y) {
@@ -606,7 +632,14 @@
       WM.modal.open(modalId);
     }
 
-    bindDrop(stage, function (state) { return state.frame ? "wm" : "frame"; });
+    els.viewActual.addEventListener("click", function () {
+      WM.setState({ viewMode: "actual" });
+    });
+    els.viewFit.addEventListener("click", function () {
+      WM.setState({ viewMode: "fit" });
+    });
+
+    bindDrop(els.stageCol || stage, function (state) { return state.frame ? "wm" : "frame"; });
     bindDrop(document.querySelector('[data-drop="frame"]'), function () { return "frame"; });
     bindDrop(document.querySelector('[data-drop="wm"]'), function () { return "wm"; });
 
