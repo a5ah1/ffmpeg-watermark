@@ -64,6 +64,7 @@ FFmpeg sees **source pixels of the dropped frame**, not CSS pixels.
 Other UI landmines:
 
 - `preventDefault` on `dragenter` / `dragover` / `drop` or `drop` never fires.
+- Loaded `.stage-col` drop is **not** always a watermark. Empty → frame; frame-only → wm; both → two-zone `#drop-veil` (top strip = frame). Shift forces frame once a frame exists. The veil is paint-only (`pointer-events: none`); pick the zone from coordinates, not `event.target`. `#drop-veil` lives in `.stage-stack` with `#stage`, not inside `#stage` (`initPreview` clears it) and not over `.stage-bar`. Fieldset `[data-drop]` stays an unambiguous target.
 - `draggable="false"` on both images and cancel `dragstart` on `#stage`, or a pointer-drag starts a browser image-drag.
 - Wait for `img.decode()` / `onload` before reading `naturalWidth`.
 - Clicking `.wm` must `stageEl.focus()` (`tabindex="0"`) or arrow nudge does nothing.

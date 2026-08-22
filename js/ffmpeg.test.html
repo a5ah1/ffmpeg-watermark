@@ -13,7 +13,7 @@
 <body>
   <h1>ffmpeg.test</h1>
   <ol id="out"></ol>
-  <script src="state.js?v=2"></script>
+  <script src="state.js?v=3"></script>
   <script src="ffmpeg.js?v=4"></script>
   <script>
     (function () {
@@ -67,6 +67,14 @@
       WM.assert("8 reject svg", !WM.acceptFile({ name: "a.svg", type: "image/svg+xml" }).ok);
       WM.assert("8 reject mp4", !WM.acceptFile({ name: "a.mp4", type: "video/mp4" }).ok);
       WM.assert("8 reject bmp", !WM.acceptFile({ name: "a.bmp", type: "image/bmp" }).ok);
+
+      var both = { frame: { width: 1 }, watermark: { nativeWidth: 1 } };
+      WM.assert("25 empty stage is frame", WM.stageDropRole({}) === "frame" && WM.stageDropRole(null) === "frame");
+      WM.assert("25 frame-only is wm", WM.stageDropRole({ frame: { width: 1 } }) === "wm");
+      WM.assert("25 both default is wm", WM.stageDropRole(both) === "wm" && WM.stageDropRole(both, { zone: "wm" }) === "wm");
+      WM.assert("25 both top strip is frame", WM.stageDropRole(both, { zone: "frame" }) === "frame");
+      WM.assert("25 shift forces frame", WM.stageDropRole(both, { shiftKey: true, zone: "wm" }) === "frame");
+      WM.assert("25 frame-only shift is frame", WM.stageDropRole({ frame: { width: 1 } }, { shiftKey: true }) === "frame");
 
       WM.assert("9 quote windows", WM.quoteArg("C:\\media\\logo.png") === '"C:\\media\\logo.png"');
       WM.assert("9 quote quote", WM.quoteArg('say "hi"') === '"say \\"hi\\""');

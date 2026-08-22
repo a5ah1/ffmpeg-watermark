@@ -208,6 +208,15 @@
     if (document.activeElement !== els.blend) els.blend.value = state.blend;
     els.blendNote.hidden = state.blend === "normal";
 
+    els.frameFileLabel.textContent = state.frame ? "Replace frame" : "Choose frame";
+    els.wmFileLabel.textContent = state.watermark ? "Replace watermark" : "Choose watermark";
+    els.frameHint.textContent = state.frame
+      ? "Drop a still here to replace. Same W×H keeps placement."
+      : "FFmpeg will use these pixels. Your video must match this W×H.";
+    els.wmHint.textContent = state.watermark
+      ? "PNG preferred (alpha). Drop here to replace."
+      : "PNG preferred (alpha).";
+
     els.frameSize.textContent = state.frame ? dim(state.frame.width, state.frame.height) : "—";
     if (state.watermark) {
       var size = WM.scaledSize(state.watermark.nativeWidth, state.watermark.nativeHeight, state.scale);
@@ -331,12 +340,14 @@
   function applyFrame(loaded) {
     var prev = WM.getState();
     var prevUrl = prev.frame && prev.frame.objectUrl;
-    var sameSize = prev.frame && prev.frame.width === loaded.width && prev.frame.height === loaded.height;
+    var hadFrame = !!prev.frame;
+    var hadWm = !!prev.watermark;
+    var sameSize = hadFrame && prev.frame.width === loaded.width && prev.frame.height === loaded.height;
     var next = {
       frame: { width: loaded.width, height: loaded.height, objectUrl: loaded.url },
       frameName: loaded.name
     };
-    if (prev.watermark && !sameSize) {
+    if (hadWm && !sameSize) {
       var place = WM.defaultPlacement(loaded.width, loaded.height, prev.watermark.nativeWidth, prev.watermark.nativeHeight);
       next.x = place.x;
       next.y = place.y;
@@ -344,6 +355,12 @@
     }
     WM.setState(next);
     if (prevUrl && prevUrl !== loaded.url) WM.revokeUrl(prevUrl);
+    if (hadFrame) {
+      var size = dim(loaded.width, loaded.height);
+      if (sameSize && hadWm) showStatus("Frame replaced · " + size + " · placement kept.", 2500);
+      else if (!sameSize && hadWm) showStatus("Frame is " + size + " · watermark re-placed.", 4000);
+      else showStatus("Frame replaced · " + size + ".", 2500);
+    }
   }
 
   function applyWatermark(loaded) {
@@ -379,17 +396,93 @@
     }
   }
 
-  function bindDrop(el, roleFor) {
+  function isFileDrag(event) {
+    var dt = event.dataTransfer;
+    if (!dt || !dt.types) return false;
+    if (typeof dt.types.contains === "function") return dt.types.contains("Files");
+    return Array.prototype.indexOf.call(dt.types, "Files") !== -1;
+  }
+
+  function dropZoneAt(clientY) {
+    var el = els.dropZoneFrame;
+    if (!el) return "wm";
+    var rect = el.getBoundingClientRect();
+    if (!rect.height) return "wm";
+    return clientY <= rect.bottom ? "frame" : "wm";
+  }
+
+  function hideDropVeil() {
+    if (!els.dropVeil) return;
+    els.dropVeil.hidden = true;
+    els.dropVeil.classList.remove("is-wm-only", "is-frame-only");
+    if (els.dropZoneFrame) els.dropZoneFrame.classList.remove("is-active");
+    if (els.dropZoneWm) els.dropZoneWm.classList.remove("is-active");
+    if (els.stageCol) els.stageCol.classList.remove("is-dragover");
+  }
+
+  function paintDropVeil(event) {
+    var state = WM.getState();
+    var shift = !!(event && event.shiftKey);
+    if (els.stageCol) els.stageCol.classList.add("is-dragover");
+    if (!els.dropVeil) return;
+    if (!state.frame) {
+      els.dropVeil.hidden = true;
+      return;
+    }
+    var both = !!state.watermark;
+    els.dropVeil.hidden = false;
+    els.dropVeil.classList.toggle("is-wm-only", !both && !shift);
+    els.dropVeil.classList.toggle("is-frame-only", shift);
+    if (els.dropWmTitle) els.dropWmTitle.textContent = both ? "Replace logo" : "Drop a watermark";
+    var zone = "wm";
+    if (both && !shift) zone = dropZoneAt(event.clientY);
+    var role = WM.stageDropRole(state, { shiftKey: shift, zone: zone });
+    if (els.dropZoneFrame) els.dropZoneFrame.classList.toggle("is-active", role === "frame");
+    if (els.dropZoneWm) els.dropZoneWm.classList.toggle("is-active", role === "wm");
+  }
+
+  function stageDropRoleFromEvent(event) {
+    var state = WM.getState();
+    var zone = "wm";
+    if (state.frame && state.watermark && !event.shiftKey) zone = dropZoneAt(event.clientY);
+    return WM.stageDropRole(state, { shiftKey: !!event.shiftKey, zone: zone });
+  }
+
+  function bindFileDrag(el, handlers) {
     if (!el) return;
-    ["dragenter", "dragover", "drop"].forEach(function (type) {
-      el.addEventListener(type, function (event) {
-        event.preventDefault();
-        if (type === "dragover" && event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-        if (type !== "drop") return;
-        var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
-        if (!file) return;
-        ingest(file, roleFor(WM.getState()));
-      });
+    var hideTimer = null;
+    function hide() {
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = null;
+      el.classList.remove("is-dragover");
+      if (handlers.onLeave) handlers.onLeave();
+    }
+    function show(event) {
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, 600);
+      el.classList.add("is-dragover");
+      if (handlers.onHover) handlers.onHover(event);
+    }
+    el.addEventListener("dragenter", function (event) {
+      event.preventDefault();
+      if (isFileDrag(event)) show(event);
+    });
+    el.addEventListener("dragover", function (event) {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      if (isFileDrag(event)) show(event);
+    });
+    el.addEventListener("dragleave", function (event) {
+      var next = event.relatedTarget;
+      if (next && el.contains(next)) return;
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, 80);
+    });
+    el.addEventListener("drop", function (event) {
+      event.preventDefault();
+      var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+      if (file && handlers.onDrop) handlers.onDrop(file, event);
+      hide();
     });
   }
 
@@ -506,9 +599,13 @@
   async function onReady() {
     els.frameName = $("frame-name");
     els.frameFile = $("frame-file");
+    els.frameFileLabel = $("frame-file-label");
     els.frameSize = $("frame-size");
+    els.frameHint = $("frame-hint");
     els.wmName = $("wm-name");
     els.wmFile = $("wm-file");
+    els.wmFileLabel = $("wm-file-label");
+    els.wmHint = $("wm-hint");
     els.wmNative = $("wm-native");
     els.wmScaled = $("wm-scaled");
     els.x = $("x");
@@ -556,6 +653,10 @@
     els.debug = $("debug");
     els.stage = $("stage");
     els.stageCol = document.querySelector(".stage-col");
+    els.dropVeil = $("drop-veil");
+    els.dropZoneFrame = $("drop-zone-frame");
+    els.dropZoneWm = $("drop-zone-wm");
+    els.dropWmTitle = $("drop-wm-title");
     els.viewActual = $("view-actual");
     els.viewFit = $("view-fit");
     els.viewReadout = $("view-readout");
@@ -639,9 +740,20 @@
       WM.setState({ viewMode: "fit" });
     });
 
-    bindDrop(els.stageCol || stage, function (state) { return state.frame ? "wm" : "frame"; });
-    bindDrop(document.querySelector('[data-drop="frame"]'), function () { return "frame"; });
-    bindDrop(document.querySelector('[data-drop="wm"]'), function () { return "wm"; });
+    bindFileDrag(els.stageCol || stage, {
+      onHover: paintDropVeil,
+      onLeave: hideDropVeil,
+      onDrop: function (file, event) {
+        ingest(file, stageDropRoleFromEvent(event));
+      }
+    });
+    bindFileDrag(document.querySelector('[data-drop="frame"]'), {
+      onDrop: function (file) { ingest(file, "frame"); }
+    });
+    bindFileDrag(document.querySelector('[data-drop="wm"]'), {
+      onDrop: function (file) { ingest(file, "wm"); }
+    });
+    window.addEventListener("dragend", hideDropVeil);
 
     stage.addEventListener("click", function (event) {
       if (event.target.closest && event.target.closest(".wm")) return;

@@ -297,6 +297,16 @@
     return { ok: false, reason: "Unsupported file (use PNG, JPEG, WebP, GIF)." };
   };
 
+  // Empty stage → frame. Frame only → watermark. Both loaded → top strip
+  // (zone "frame") or Shift → frame; otherwise watermark. Shift wins.
+  WM.stageDropRole = function (state, opts) {
+    opts = opts || {};
+    if (!state || !state.frame) return "frame";
+    if (opts.shiftKey) return "frame";
+    if (!state.watermark) return "wm";
+    return opts.zone === "frame" ? "frame" : "wm";
+  };
+
   WM.basename = function (name) {
     var value = String(name || "");
     var parts = value.split(/[/\\]/);

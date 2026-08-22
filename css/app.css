@@ -96,6 +96,7 @@ h1 {
 }
 
 .stage-col {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -109,8 +110,18 @@ h1 {
   background: var(--panel);
 }
 
-.stage-col:focus-within {
+.stage-col:focus-within,
+.stage-col.is-dragover {
   outline-color: var(--phosphor);
+}
+
+.stage-stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 #stage {
@@ -206,6 +217,93 @@ h1 {
 }
 
 .hint-sub { color: var(--dim); }
+
+#drop-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(11, 12, 9, 0.66);
+}
+
+#drop-veil[hidden] {
+  display: none !important;
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 10px;
+  border: 1px dashed rgba(214, 255, 62, 0.28);
+  color: var(--muted);
+  text-align: center;
+}
+
+.drop-zone[data-drop-zone="frame"] {
+  flex: 0 0 26%;
+  min-height: 84px;
+  max-height: 160px;
+}
+
+.drop-zone[data-drop-zone="wm"] {
+  flex: 1 1 auto;
+}
+
+#drop-veil.is-wm-only .drop-zone[data-drop-zone="frame"],
+#drop-veil.is-frame-only .drop-zone[data-drop-zone="wm"] {
+  display: none;
+}
+
+#drop-veil.is-frame-only .drop-zone[data-drop-zone="frame"] {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+#drop-veil:not(.is-wm-only) #drop-wm-sub {
+  display: none;
+}
+
+.drop-zone.is-active {
+  border-style: solid;
+  border-color: var(--phosphor);
+  color: var(--ink);
+  background: rgba(214, 255, 62, 0.07);
+  box-shadow: inset 0 0 0 1px var(--phosphor);
+}
+
+.drop-zone strong {
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.drop-zone span {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.drop-zone.is-active span {
+  color: var(--muted);
+}
+
+#drop-veil-shift {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  margin: 0;
+  color: var(--amber);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
 
 .frame-wrap {
   position: absolute;
@@ -332,6 +430,12 @@ fieldset {
   padding: 12px 12px 14px;
   border: 1px solid var(--line);
   min-width: 0;
+}
+
+.file-set.is-dragover {
+  border-color: var(--phosphor);
+  background: rgba(214, 255, 62, 0.05);
+  box-shadow: 0 0 0 1px var(--phosphor);
 }
 
 legend {

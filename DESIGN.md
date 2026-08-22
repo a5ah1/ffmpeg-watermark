@@ -368,7 +368,13 @@ WM.presetPosition(id /* TL TC TR ML C MR BL BC BR */, frameW, frameH, sw, sh, ma
 WM.acceptFile(file: { name: string, type: string }): { ok: boolean, reason?: string }
   // ok if MIME in ACCEPT_MIME OR extension in ACCEPT_EXT (case-insensitive)
   // reject empty file, SVG (image/svg+xml / .svg) even if a browser can rasterize
-  // reject video/* 
+  // reject video/*
+
+WM.stageDropRole(state, opts?: { shiftKey?: boolean, zone?: "frame" | "wm" }): "frame" | "wm"
+  // Empty / no frame → "frame"
+  // Shift (once a frame exists) → "frame"
+  // Frame, no watermark → "wm"
+  // Both loaded, zone "frame" (top strip) → "frame"; otherwise "wm" 
 
 WM.basename(name: string): string       // last segment after / or \
 WM.revokeUrl(url: string | null): void  // revokeObjectURL only when url starts with blob:
@@ -629,7 +635,7 @@ Responsibilities only:
 - Frame replace with **same** W×H: keep `x/y/scale`.
 - Watermark replace: `defaultPlacement` using new native size (and current frame size).
 - Form `input`/`change` → parse → `setState` of **top-level** keys only (`#frame-name` → `frameName`, `#wm-name` → `wmName`, etc.).
-- Drop targets (`#stage`, frame fieldset, watermark fieldset): `dragenter` / `dragover` / `drop` all call `preventDefault()`. `dragover` sets `dataTransfer.dropEffect = "copy"`. Without `preventDefault` on `dragover`, `drop` never fires.
+- Drop targets (`.stage-col`, frame fieldset, watermark fieldset): `dragenter` / `dragover` / `drop` all call `preventDefault()`. `dragover` sets `dataTransfer.dropEffect = "copy"`. Without `preventDefault` on `dragover`, `drop` never fires. Stage-column role comes from `WM.stageDropRole`. `#drop-veil` is paint-only (`pointer-events: none`); pick the top strip vs the rest from coordinates, not `event.target`.
 - Both preview images: `draggable="false"`. `#stage` cancels `dragstart` so a pointer-drag on the watermark body cannot start a browser image-drag.
 - Copy buttons → `copyText(text, buttonEl, textareaEl)` (see API). The fallback selects **that** textarea, not a hardcoded `#filter-out`.
 - `pagehide` → revoke both object URLs. Do **not** listen for `beforeunload` and do **not** set `returnValue`.
@@ -642,7 +648,7 @@ Two-column viewport layout (`display: grid`). Preview is `minmax(0, 1fr)`; form 
 
 #### Left / top: preview (`#stage` + `.stage-bar`)
 
-`.stage-col` is the left-column chrome (border, outline, margin). Drop on the column (stage or bar) uses the same role as a stage drop.
+`.stage-col` is the left-column chrome (border, outline, margin). Drop on the column (stage or bar) uses the same role as a stage drop. `#drop-veil` lives in `.stage-stack` with `#stage` (not inside `#stage` — `initPreview` clears that node, and the veil must not cover `.stage-bar`). It is `position:absolute; inset:0` on the stack with `pointer-events: none`.
 
 **Empty (no frame).** Full-area dashed drop zone:
 
@@ -656,12 +662,17 @@ Clicking the empty stage opens `#frame-file` (`<input type="file">`).
 
 ```
 .stage-col
-  #stage                        /* position:relative; checkerboard; flex:1; contain target */
-    .frame-wrap                 /* absolutely placed to contain-rect; overflow:hidden */
-      img#frame-img             /* width:100%; height:100%; display:block */
-      .wm                       /* position:absolute; transform-origin:top left */
-        img#wm-img
-        .handle[data-handle=nw|ne|sw|se]
+  .stage-stack                  /* flex:1; position:relative; veil host — not .stage-bar */
+    #stage                      /* position:relative; checkerboard; flex:1; contain target */
+      .frame-wrap               /* absolutely placed to contain-rect; overflow:hidden */
+        img#frame-img           /* width:100%; height:100%; display:block */
+        .wm                     /* position:absolute; transform-origin:top left */
+          img#wm-img
+          .handle[data-handle=nw|ne|sw|se]
+    #drop-veil                  /* pointer-events:none; covers #stage only while dragging a file */
+      #drop-zone-frame
+      #drop-zone-wm
+      #drop-veil-shift
   .stage-bar                    /* not part of #stage / contain-rect */
     #view-actual                /* 1:1 — maxScale=1; default; aria-pressed */
     #view-fit                   /* Fit — unconstrained contain; not persisted */
@@ -673,7 +684,12 @@ Clicking the empty stage opens `#frame-file` (`<input type="file">`).
 - Thin 1 px outline on `.wm` when `state.selected`.
 - `opacity` and `mix-blend-mode` live on `img#wm-img` only (see preview contract). Handles stay `mix-blend-mode: normal`.
 - Non-normal blend: show a persistent note in the form: *“Preview blend is CSS and is not pixel-identical to FFmpeg (gamma / color space).”*
-- Drop on a loaded stage → treat as **watermark** (not a new frame). To replace the frame, use the form's frame control.
+- Drop role on `.stage-col`:
+  - **Empty** (no frame): frame. Existing dashed hint; `.is-dragover` punches the column outline. No veil.
+  - **Frame, no watermark:** veil is a single “Drop a watermark” zone. Shift → single “Replace frame” zone.
+  - **Both loaded:** two-zone veil. Top strip (`#drop-zone-frame`, ~26% / min 84px) is **replace frame**. The rest (`#drop-zone-wm`) is **replace logo**. Active zone gets a solid phosphor rule. Shift collapses to a full-column frame drop (`#drop-veil.is-frame-only`). Amber kicker: “Shift · frame anywhere”.
+  - Frame fieldset `[data-drop=frame]` / watermark fieldset `[data-drop=wm]` stay unambiguous. `.file-set.is-dragover` is the phosphor outline. Button labels switch to “Replace frame” / “Replace watermark” once that slot is filled.
+  - Same W×H frame replace keeps `x/y/scale` (already). Status: `Frame replaced · W × H · placement kept.` Different W×H with a logo present re-runs `defaultPlacement`; status: `Frame is W × H · watermark re-placed.` `#video-name` / `#output-name` are not touched.
 - `ResizeObserver` on `#stage` re-renders positions (window resize / first layout).
 - `pointerdown` on `.wm` sets `state.selected = true` **and** `stageEl.focus()` so arrow-key nudge works (`#stage` has `tabindex="0"`). Clicking `.wm` without focusing the stage is why arrows otherwise do nothing.
 - Preview default is 1:1 (`getContainedRect(…, 1)`). Fit (`#view-fit`) omits `maxScale`. `#view-actual` / `#view-fit` disabled until a frame is loaded. `viewMode` is not in `snapshotSession`.
@@ -683,10 +699,12 @@ Clicking the empty stage opens `#frame-file` (`<input type="file">`).
 | Control | ID | Behavior |
 | --- | --- | --- |
 | Frame file name | `#frame-name` | text, editable, binds to `frameName`. Seeded with `file.name` on drop. **Display / label only** — it is **not** a command path (the first `-i` is `#video-name`). Does **not** reload the preview when edited. |
-| Frame file picker | `#frame-file` | `accept` whitelist. Also a drop target on the fieldset. |
+| Frame file picker | `#frame-file` | `accept` whitelist. Also a drop target on the fieldset. Label `#frame-file-label` is “Choose frame” / “Replace frame”. |
 | Frame size | `#frame-size` | read-only `1920 × 1080` or `—`. |
+| Frame hint | `#frame-hint` | empty: pixels/W×H warning. Loaded: drop-to-replace + same-size keeps placement. |
 | Watermark file name | `#wm-name` | text, editable, binds to `wmName`. Seeded with `file.name`. User pastes `C:\media\logo.png` here; this **is** the second `-i`. Does **not** reload the preview when edited. |
-| Watermark picker | `#wm-file` | same accept list. Preferred type in helper text: PNG (alpha). |
+| Watermark picker | `#wm-file` | same accept list. Label `#wm-file-label` is “Choose watermark” / “Replace watermark”. Preferred type in `#wm-hint`: PNG (alpha). |
+| Stage drop veil | `#drop-veil` | paint-only overlay on `.stage-col` while a file is dragged. Zones `#drop-zone-frame` / `#drop-zone-wm`. Shift kicker `#drop-veil-shift`. |
 | Native size | `#wm-native` | read-only `300 × 100`. |
 | Scaled size | `#wm-scaled` | read-only live `240 × 80`. |
 | X | `#x` | integer number input, source px. |
@@ -1066,6 +1084,7 @@ Minimum cases:
 | 22 | `patchEncode` | `{ crf: 18 }` keeps `preset` / `audio` |
 | 23 | session snapshot | drops `selected`, `objectUrl`, and `viewMode`; restores fields; `viewMode` stays `"actual"` even if the payload has `"fit"`; images optional; bad/v≠1 → defaults |
 | 24 | `computeFilterGraph` | odd crop `55×336` at `x=8,y=426`, opacity `0.12`, `lighten` — video crop is `crop=55:336:8:426:exact=1` — **exact string equality** |
+| 25 | `stageDropRole` | empty → frame; frame-only → wm; both default → wm; both + zone frame → frame; Shift (with or without a logo) → frame |
 
 `getContainedRect` / `mapPointerToSource` live in `state.js` so the two-script test page can assert 16 without loading `preview.js`.
 

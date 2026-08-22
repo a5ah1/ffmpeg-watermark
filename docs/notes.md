@@ -34,6 +34,8 @@ Odd-sized patches need `exact=1` on the **video** crop. Default `crop` on yuv420
 
 The stage default is **1:1**: a frame smaller than the stage stays native CSS pixels. **Fit** (bar under the preview) is unconstrained contain and is not written to session storage. Large frames still scale down either way. Watermark `defaultPlacement` still scale-downs to the frame on drop; that is source pixels, not preview zoom.
 
+Once a frame and a logo are both loaded, a file dragged over the stage shows a two-zone overlay: the top strip replaces the **frame**, the rest replaces the **logo**. Same W×H keeps `x/y/scale`; a different size re-runs `defaultPlacement`. Shift makes the whole column a frame drop. The Frame fieldset is always a frame drop (no overlay). Video/output paths are not rewritten.
+
 ## GIF
 
 Accepted as a still. The browser may animate the preview; FFmpeg may decode more than one frame. Treat GIF as static.
