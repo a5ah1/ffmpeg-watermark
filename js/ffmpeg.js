@@ -83,8 +83,8 @@
       "[0:v]split[base][bot];" +
       "[bot]crop=" + crop.cropW + ":" + crop.cropH + ":" + crop.outX + ":" + crop.outY + ":exact=1,format=gbrp[botg];" +
       "[wmgl][botg]blend=all_mode=" + mode + ":shortest=1[mix];" +
-      "[mix][maskl]alphamerge[mixa];" +
-      "[base][mixa]overlay=x=" + crop.outX + ":y=" + crop.outY + ":format=auto"
+      "[mix][maskl]alphamerge=shortest=1[mixa];" +
+      "[base][mixa]overlay=x=" + crop.outX + ":y=" + crop.outY + ":format=rgb:shortest=1"
     );
   }
 

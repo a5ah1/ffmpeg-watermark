@@ -38,12 +38,12 @@ So the blend path must:
 1. Crop both patches to the frame intersection (`intersectCrop`). **Never `pad`.** Official `pad` *re-centers* when `x` or `y` is negative, and `black@0` padding multiplied against the frame crushes the picture. Video `[bot]crop` always includes `exact=1`. Without it, yuv420 chroma rounding shrinks odd W/H (55→54) and `blend` fails. Watermark crop stays after `format=rgba` (already exact). Do not `format=gbrp` the full frame before crop.
 2. `loop=loop=-1:size=1` the still RGB and the extracted mask *inside the graph*.
 3. Explicit `[0:v]split[base][bot]`. Do not rely on the CLI auto-splitting a labeled pad.
-4. `blend=all_mode=…:shortest=1` so the finite video ends the filter.
+4. `shortest=1` on `blend`, `alphamerge`, and the final `overlay`. `blend` alone is not enough: the looped mask never EOFs, so default `alphamerge` `eof_action=repeat` encodes the last composited frame forever. Overlay `shortest=1` stops when `[base]` (the video, including input `-ss`/`-to`) EOFs. Do **not** add CLI `-shortest`.
 5. Join `{wmChain},split` with a **comma**. `format=rgba` is always on this path (even at opacity 1) so `alphaextract` has a plane.
 
 Goldens A/B/C in DESIGN.md are asserted with `===`. If you cannot match them, hide `#blend` and ship overlay-only. Do not invent a third graph.
 
-`formatAa` must stringify like JS (`0.8`, not `0.800`). Overlay omits `scale` / `format=rgba,colorchannelmixer` when they are no-ops. Emit `overlay=…:format=auto` (not the filter default `yuv420`). No trailing `format=yuv420p` in the copied graph. Encoder `-pix_fmt yuv420p` belongs on the **command**, always.
+`formatAa` must stringify like JS (`0.8`, not `0.800`). Overlay omits `scale` / `format=rgba,colorchannelmixer` when they are no-ops. Overlay/normal emits `overlay=…:format=auto` (not the filter default `yuv420`). Blend's final overlay is `format=rgb`: `alphamerge` on `gbrp` makes `format=auto` pick packed ARGB, and libswscale has no SIMD for `yuv420p→argb` (the swscaler warning). `format=rgb` is still packed RGB, no even-x/y snap. No trailing `format=yuv420p` in the copied graph. Encoder `-pix_fmt yuv420p` belongs on the **command**, always.
 
 Fully off-frame + blend selected → fall back to the overlay path (FFmpeg clips) and set the status line.
 

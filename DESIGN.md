@@ -469,7 +469,7 @@ Do **not** emit `eval=`, `repeatlast=`, `alpha=`, or a trailing `format=yuv420p`
 Two constraints, both blocking if ignored:
 
 1. **Spatial.** `blend` needs same-size inputs and does **not** mask by top-layer alpha. A full-frame `pad` of the logo with `black@0` makes the padded region RGB `0,0,0`; `all_mode=multiply` then crushes the whole frame. v1 therefore **crops both patches to the intersection** and blends only that rectangle.
-2. **Temporal.** `blend` first input is **top**. The watermark must stay first because **`all_mode=overlay` is not commutative** (video-as-top is the inverse of Photoshop overlay). `multiply`, `screen`, `addition`, `darken`, and `lighten` *are* commutative; we still use one watermark-first graph for every curated mode. That makes the still the framesync **primary**. A 1-frame primary + `repeatlast` on the secondary emits **one frame**. Feeding that 1-frame `mixa` to `overlay` as secondary then stamps video frame 0 into the logo region for the rest of the clip. v1 therefore loops the stills *inside* the graph and sets `shortest=1` on `blend` so the finite video ends the filter.
+2. **Temporal.** `blend` first input is **top**. The watermark must stay first because **`all_mode=overlay` is not commutative** (video-as-top is the inverse of Photoshop overlay). `multiply`, `screen`, `addition`, `darken`, and `lighten` *are* commutative; we still use one watermark-first graph for every curated mode. That makes the still the framesync **primary**. A 1-frame primary + `repeatlast` on the secondary emits **one frame**. Feeding that 1-frame `mixa` to `overlay` as secondary then stamps video frame 0 into the logo region for the rest of the clip. v1 therefore loops the stills *inside* the graph. The looped mask never EOFs, so `shortest=1` is required on `blend`, `alphamerge`, and the final `overlay` — otherwise default `eof_action=repeat` encodes the last composited frame forever. Overlay `shortest=1` also makes input `-ss`/`-to` (which EOF `[0:v]`) the duration of the output. Do not use CLI `-loop 1` or CLI `-shortest`.
 
 If `intersectCrop` returns `null` (fully off-frame), **fall back to the overlay path** with the raw integer `x`/`y` (FFmpeg clips) and set `#status` to `Watermark is fully outside the frame; FFmpeg will clip it.`
 
@@ -485,7 +485,7 @@ Otherwise emit exactly this skeleton. `{wmChain}` is the watermark steps below, 
 Then the dual-input tail is **fixed** (same labels every time):
 
 ```
-[1:v]{wmChain},split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop={cropW}:{cropH}:{outX}:{outY}:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode={mode}:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x={outX}:y={outY}:format=auto
+[1:v]{wmChain},split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop={cropW}:{cropH}:{outX}:{outY}:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode={mode}:shortest=1[mix];[mix][maskl]alphamerge=shortest=1[mixa];[base][mixa]overlay=x={outX}:y={outY}:format=rgb:shortest=1
 ```
 
 Notes the implementer must not “simplify” away:
@@ -493,9 +493,10 @@ Notes the implementer must not “simplify” away:
 - Watermark is **first** on `blend` (`[wmgl][botg]`, top then bottom).
 - `[0:v]` is read only via `split[base][bot]`. `base` is the uncropped video for the final overlay; `bot` is the same-size crop.
 - `[bot]crop` always includes `:exact=1`. Goldens A/B/C are even-sized and would not catch chroma rounding; case 24 locks an odd W. The watermark `crop` (overflow only, after `format=rgba`) does **not** take `exact=1`.
-- `loop=loop=-1:size=1` is **in-graph**. The command template still has no CLI `-loop 1`.
-- `shortest=1` is on `blend` only. `alphamerge` is emitted with no extra options (11.3 does not document framesync). The looped mask supplies a sample per mix frame; mix is finite because blend already ended with the video.
+- `loop=loop=-1:size=1` is **in-graph**. The command template still has no CLI `-loop 1` or CLI `-shortest`.
+- `shortest=1` is on **every dual-input filter** that sees a looped still: `blend`, `alphamerge`, and the final `overlay`. The looped mask never EOFs. Without `alphamerge=shortest=1`, framesync `eof_action=repeat` (default) repeats the last mixed frame forever — the encode hangs on the last composited frame. Overlay `shortest=1` makes `[base]` (the finite video, including input `-ss`/`-to`) the duration driver even if mixa is still infinite. Overlay/normal does **not** loop and does **not** emit `shortest=1` (a 1-frame PNG secondary + `repeatlast=1` is enough).
 - Both blend inputs are `gbrp` (no alpha in the blend). Alpha is restored by `alphamerge` from the extracted mask, then `overlay` composites the patch. The cropped video region therefore takes a yuv↔gbrp round-trip — a color shift vs the overlay-only path. Documented in Risks; not hidden.
+- The final overlay on this path is `format=rgb`, not `format=auto`. `alphamerge` on `gbrp` makes FFmpeg pick packed **ARGB**; `overlay=format=auto` then converts the full-frame `[base]` with `yuv420p→argb`, which libswscale has **no SIMD** for (`No accelerated colorspace conversion found from yuv420p to argb`, once per slice thread). `yuv420p→rgba` / `rgb24` / `gbrp` *are* accelerated. `format=rgb` is still packed RGB (no even-x/y chroma snap). The overlay-only path stays `format=auto` (that path's overlay pad is already `rgba`).
 - No `pad` filter. `outX`/`outY` are overlay coordinates only (`intersectCrop`).
 
 ###### Golden string A — fully inside, scale + opacity
@@ -503,7 +504,7 @@ Notes the implementer must not “simplify” away:
 State: frame `1920×1080`, watermark native `300×100`, `scale=0.8` → `240×80`, `x=1680`, `y=980`, `opacity=0.8`, `blend="multiply"`. Intersection is the full scaled rect, so no watermark `crop`.
 
 ```
-[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto
+[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge=shortest=1[mixa];[base][mixa]overlay=x=1680:y=980:format=rgb:shortest=1
 ```
 
 ###### Golden string B — partial overflow, scale = 1, opacity ≠ 1
@@ -511,7 +512,7 @@ State: frame `1920×1080`, watermark native `300×100`, `scale=0.8` → `240×80
 State: frame `1920×1080`, watermark native `100×50`, `scale=1`, `x=-10`, `y=10`, `opacity=0.8`, `blend="multiply"`. `intersectCrop` → `{ cropX:10, cropY:0, cropW:90, cropH:50, outX:0, outY:10 }`.
 
 ```
-[1:v]format=rgba,colorchannelmixer=aa=0.8,crop=90:50:10:0,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=90:50:0:10:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=0:y=10:format=auto
+[1:v]format=rgba,colorchannelmixer=aa=0.8,crop=90:50:10:0,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=90:50:0:10:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge=shortest=1[mixa];[base][mixa]overlay=x=0:y=10:format=rgb:shortest=1
 ```
 
 ###### Golden string C — opacity = 1 still emits `format=rgba`
@@ -519,7 +520,7 @@ State: frame `1920×1080`, watermark native `100×50`, `scale=1`, `x=-10`, `y=10
 State: frame `1920×1080`, watermark native `240×80`, `scale=1`, `x=1680`, `y=980`, `opacity=1`, `blend="multiply"`. No `scale`, no `colorchannelmixer`, no watermark `crop`; `format=rgba` remains.
 
 ```
-[1:v]format=rgba,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto
+[1:v]format=rgba,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge=shortest=1[mixa];[base][mixa]overlay=x=1680:y=980:format=rgb:shortest=1
 ```
 
 `js/ffmpeg.test.html` asserts `computeFilterGraph(state).filter ===` each golden string (exact equality, not `contains`).
@@ -804,7 +805,7 @@ image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif
 | Opacity | CSS `opacity` | `colorchannelmixer=aa` after `format=rgba` |
 | Normal composite | default (src-over) | `overlay` + `format=auto` |
 | Blend modes | `mix-blend-mode` on `#wm-img` only (sRGB, often gamma-incorrect) | crop-patch `blend=all_mode=` in gbrp, alphamerge, overlay |
-| Chroma | browser RGB | `format=auto` avoids forcing yuv420 in the graph; the **command** always adds encoder `-pix_fmt yuv420p` |
+| Chroma | browser RGB | overlay/normal `format=auto` and blend `format=rgb` avoid forcing yuv420 in the graph; the **command** always adds encoder `-pix_fmt yuv420p` |
 
 Document in the form and README: **do not treat the blend preview as a color-managed proof.**
 
@@ -1079,13 +1080,14 @@ Keep the file under ~250 lines. This is a prototype.
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
 | Frame still W×H ≠ actual video W×H → watermark in the wrong place | **High** | UI + README: video must match the frame. No DAR/SAR conversion in v1. |
-| Blend still-as-primary freezes video frame 0 under the logo | **Critical** | In-graph `loop=loop=-1:size=1` + `blend=…:shortest=1` + explicit `[0:v]split`. Golden-string tests + docs/notes.md multi-frame smoke test. |
+| Blend still-as-primary freezes video frame 0 under the logo | **Critical** | In-graph `loop=loop=-1:size=1` + `shortest=1` on `blend` / `alphamerge` / overlay + explicit `[0:v]split`. Golden-string tests + docs/notes.md multi-frame smoke test (encode **completes**; motion under the logo). |
 | Naïve pad+blend crushes the frame | **High** | Do not emit pad; crop-patch + alphamerge (Decision 9). |
 | `pad` recenters on negative x/y | n/a in v1 | Blend path does not emit `pad`. Overlay path may emit negative x/y. |
 | Blend path `crop` on yuv420p rounds odd W/H | **High** (encode fails) | Always `exact=1` on `[bot]crop`. Goldens A/B/C + case 24 (odd W). Overlay path does not crop the video. |
-| Blend path yuv↔gbrp round-trip on the cropped patch | Medium | Document; overlay-only path does not have this shift. `format=auto` on the final overlay. |
+| Blend path yuv↔gbrp round-trip on the cropped patch | Medium | Document; overlay-only path does not have this shift. Blend final overlay is `format=rgb`. |
+| Blend `overlay=format=auto` → unaccelerated `yuv420p→argb` | Low (warning only) | `alphamerge` on `gbrp` negotiates packed ARGB; libswscale has no SIMD for that pair (rgba/rgb24/gbrp do). Blend overlay is `format=rgb`. Overlay/normal stays `format=auto`. |
 | CSS blend ≠ FFmpeg blend | Medium | Warning in UI; default path is Normal/overlay where preview *is* a fair analogue. Opacity + mix-blend isolated on `#wm-img`. |
-| `alphamerge` + infinite looped mask hangs some builds | Medium | Mix is finite (`shortest=1` on blend). docs/notes.md smoke test includes “encode completes”. If a build hangs, hide `#blend` and ship overlay-only (Alternative 7 fallback). |
+| `alphamerge` + infinite looped mask hangs the encode | **High** | Looped mask never EOFs; default `eof_action=repeat` stamps the last mix forever. `alphamerge=shortest=1` and overlay `shortest=1`. Smoke test: encode completes, frame count matches the video (or `-ss`/`-to` window). |
 | Animated GIF: browser animates, FFmpeg may decode as multi-frame | Medium | Accept GIF; README: treat as static; v1 does not freeze the first frame in preview (optional `canvas` draw of frame 0 is a later polish). |
 | `file://` clipboard / drag quirks | Medium | execCommand fallback; form file inputs as a parallel path. |
 | Chroma siting if someone later forces `format=yuv420` | Low | We emit `format=auto`. Document even-x/y as optional advice, not a generator rule. |
