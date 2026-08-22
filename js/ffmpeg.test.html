@@ -14,7 +14,7 @@
   <h1>ffmpeg.test</h1>
   <ol id="out"></ol>
   <script src="state.js?v=2"></script>
-  <script src="ffmpeg.js?v=1"></script>
+  <script src="ffmpeg.js?v=2"></script>
   <script>
     (function () {
       var out = document.getElementById("out");
@@ -90,7 +90,7 @@
         watermark: { nativeWidth: 300, nativeHeight: 100, objectUrl: "y" }, scale: 0.8
       })).filter === "[1:v]scale=240:80[wm];[0:v][wm]overlay=x=1680:y=980:format=auto");
 
-      var goldA = "[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
+      var goldA = "[1:v]scale=240:80,format=rgba,colorchannelmixer=aa=0.8,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
       WM.assert("14 golden A", WM.computeFilterGraph(st({
         watermark: { nativeWidth: 300, nativeHeight: 100, objectUrl: "y" },
         scale: 0.8, opacity: 0.8, blend: "multiply"
@@ -170,13 +170,13 @@
 
       WM.assert("18 needsScale 1", WM.needsScale(1, 240, 80) === false);
 
-      var goldB = "[1:v]format=rgba,colorchannelmixer=aa=0.8,crop=90:50:10:0,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=90:50:0:10,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=0:y=10:format=auto";
+      var goldB = "[1:v]format=rgba,colorchannelmixer=aa=0.8,crop=90:50:10:0,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=90:50:0:10:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=0:y=10:format=auto";
       WM.assert("19 golden B", WM.computeFilterGraph(st({
         watermark: { nativeWidth: 100, nativeHeight: 50, objectUrl: "y" },
         x: -10, y: 10, scale: 1, opacity: 0.8, blend: "multiply"
       })).filter === goldB);
 
-      var goldC = "[1:v]format=rgba,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
+      var goldC = "[1:v]format=rgba,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=240:80:1680:980:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=multiply:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=1680:y=980:format=auto";
       WM.assert("20 golden C", WM.computeFilterGraph(st({ opacity: 1, blend: "multiply" })).filter === goldC);
 
       WM.assert("21 clampCrf", WM.clampCrf(NaN) === 23 && WM.clampCrf(-1) === 0 && WM.clampCrf(51.4) === 51 && WM.clampCrf(18.2) === 18);
@@ -220,6 +220,12 @@
       WM.assert("23 restore images", withImgs.frame.objectUrl === "data:frame" && withImgs.frame.width === 1920 && withImgs.watermark.objectUrl === "data:wm");
       WM.assert("23 bad session", WM.stateFromSession(null).opacity === 0.8 && WM.stateFromSession({ v: 2 }).frameName === "");
       WM.assert("23 normalizeBlend", WM.normalizeBlend("screen") === "screen" && WM.normalizeBlend("nope") === "normal");
+
+      var goldOdd = "[1:v]format=rgba,colorchannelmixer=aa=0.12,split[wm][wmsrc];[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];[wm]format=gbrp,loop=loop=-1:size=1[wmgl];[0:v]split[base][bot];[bot]crop=55:336:8:426:exact=1,format=gbrp[botg];[wmgl][botg]blend=all_mode=lighten:shortest=1[mix];[mix][maskl]alphamerge[mixa];[base][mixa]overlay=x=8:y=426:format=auto";
+      WM.assert("24 odd crop exact=1", WM.computeFilterGraph(st({
+        watermark: { nativeWidth: 55, nativeHeight: 336, objectUrl: "y" },
+        x: 8, y: 426, scale: 1, opacity: 0.12, blend: "lighten"
+      })).filter === goldOdd);
 
       document.title = (failed ? failed + " failed" : "all pass") + " — ffmpeg.test";
     })();

@@ -81,7 +81,7 @@
       "[wmsrc]alphaextract,loop=loop=-1:size=1[maskl];" +
       "[wm]format=gbrp,loop=loop=-1:size=1[wmgl];" +
       "[0:v]split[base][bot];" +
-      "[bot]crop=" + crop.cropW + ":" + crop.cropH + ":" + crop.outX + ":" + crop.outY + ",format=gbrp[botg];" +
+      "[bot]crop=" + crop.cropW + ":" + crop.cropH + ":" + crop.outX + ":" + crop.outY + ":exact=1,format=gbrp[botg];" +
       "[wmgl][botg]blend=all_mode=" + mode + ":shortest=1[mix];" +
       "[mix][maskl]alphamerge[mixa];" +
       "[base][mixa]overlay=x=" + crop.outX + ":y=" + crop.outY + ":format=auto"

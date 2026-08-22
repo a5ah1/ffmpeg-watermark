@@ -26,6 +26,8 @@ ffmpeg -i video.mp4 -i logo.png -filter_complex "…" -c:a copy out.mp4
 
 Play the result and confirm motion continues **under** the logo, and that the encode completes. A still-on-still encode cannot catch a frozen-frame bug. Preview blend is CSS (`mix-blend-mode`) and is not pixel-identical to FFmpeg.
 
+Odd-sized patches need `exact=1` on the **video** crop. Default `crop` on yuv420p rounds odd W/H/X/Y down (chroma alignment), so a 55-wide still becomes top 55×H vs bottom 54×H and `blend` errors (`First input link top parameters … do not match`). The generator always emits `exact=1` on `[bot]crop`. That is not a blend-mode bug — Normal/overlay never crops the video, so it does not hit this. Include at least one odd W or H in a smoke test when changing the blend graph.
+
 ## Preview size
 
 The stage default is **1:1**: a frame smaller than the stage stays native CSS pixels. **Fit** (bar under the preview) is unconstrained contain and is not written to session storage. Large frames still scale down either way. Watermark `defaultPlacement` still scale-downs to the frame on drop; that is source pixels, not preview zoom.

@@ -35,7 +35,7 @@ Filenames **never** enter the filtergraph. Only integers, fixed filter names, an
 
 So the blend path must:
 
-1. Crop both patches to the frame intersection (`intersectCrop`). **Never `pad`.** Official `pad` *re-centers* when `x` or `y` is negative, and `black@0` padding multiplied against the frame crushes the picture.
+1. Crop both patches to the frame intersection (`intersectCrop`). **Never `pad`.** Official `pad` *re-centers* when `x` or `y` is negative, and `black@0` padding multiplied against the frame crushes the picture. Video `[bot]crop` always includes `exact=1`. Without it, yuv420 chroma rounding shrinks odd W/H (55→54) and `blend` fails. Watermark crop stays after `format=rgba` (already exact). Do not `format=gbrp` the full frame before crop.
 2. `loop=loop=-1:size=1` the still RGB and the extracted mask *inside the graph*.
 3. Explicit `[0:v]split[base][bot]`. Do not rely on the CLI auto-splitting a labeled pad.
 4. `blend=all_mode=…:shortest=1` so the finite video ends the filter.
