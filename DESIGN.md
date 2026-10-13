@@ -441,7 +441,7 @@ WM.computeCommand(state, filter: string): string
   // out   = outputName.trim() || "OUTPUT"
   // encode missing → createEncodeState() defaults
   // -ss/-to only before the video -i; times unquoted
-  // audio: copy → -c:a copy; none → omit;
+  // audio: copy → -c:a copy; none → -an;
   //   aac CBR → -c:a aac -b:a {bitrate};
   //   aac VBR → -c:a aac -q:a {0.1–2, default 2};
   //   libfdk VBR → -c:a libfdk_aac -vbr {1–5, default 3};
@@ -540,14 +540,14 @@ ffmpeg -i "INPUT_VIDEO" -i "logo.png" -filter_complex "[1:v]scale=240:80,format=
 With trim + film + 30 fps hint + audio omitted:
 
 ```
-ffmpeg -ss 1:30 -to 2:45 -i "clip.mp4" -i "logo.png" -filter_complex "…" -c:v libx264 -crf 21 -preset slow -tune film -pix_fmt yuv420p -x264-params "keyint=300:aq-mode=2" "out.mp4"
+ffmpeg -ss 1:30 -to 2:45 -i "clip.mp4" -i "logo.png" -filter_complex "…" -c:v libx264 -crf 21 -preset slow -tune film -pix_fmt yuv420p -x264-params "keyint=300:aq-mode=2" -an "out.mp4"
 ```
 
 Rules:
 
 - Double-quote each of the three paths via `quoteArg`. Also quote `-x264-params` and `-filter_complex` values.
 - Always emit `-c:v libx264 -crf N -preset P -pix_fmt yuv420p`. `-pix_fmt` is an **encoder** flag (QuickTime / browser playback). Do **not** put `format=yuv420p` in the copied graph.
-- Default audio is `-c:a copy`. `none` omits the flag (video-only). `aac` / `libfdk_aac` follow the ffmpeg.party wizard: CBR `-b:a`, native VBR `-q:a` (0.1–2, experimental), libfdk VBR `-vbr` (1–5). `libfdk_aac` needs a custom FFmpeg build.
+- Default audio is `-c:a copy`. `none` emits `-an` (no audio in the output). `aac` / `libfdk_aac` follow the ffmpeg.party wizard: CBR `-b:a`, native VBR `-q:a` (0.1–2, experimental), libfdk VBR `-vbr` (1–5). `libfdk_aac` needs a custom FFmpeg build.
 - Metadata is optional and comes after audio: `-map_metadata -1` plus `-metadata title|description|comment|year=`. Empty fields are omitted. Values go through `quoteArg`.
 - `-ss` / `-to` are input options on the **video** `-i` only (absolute source timestamps). Semicolons become colons. Input seek is not frame-accurate.
 - `fpsPreset` does **not** emit `-r`. It only fills `keyint={10×fps}:aq-mode=2`.

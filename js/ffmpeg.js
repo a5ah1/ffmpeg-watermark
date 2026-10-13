@@ -133,7 +133,7 @@
 
   WM.buildAudioFlags = function (encode) {
     var audio = WM.normalizeAudio(encode && encode.audio);
-    if (audio === "none") return [];
+    if (audio === "none") return ["-an"];
     if (!WM.audioNeedsEncode(audio)) return ["-c:a copy"];
     var parts = ["-c:a " + audio];
     if (WM.normalizeAudioMode(encode && encode.audioMode) === "cbr") {

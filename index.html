@@ -224,7 +224,7 @@
               <span>Codec</span>
               <select id="encode-audio"></select>
             </label>
-            <p class="hint" id="encode-audio-hint">Copy is lossless. Omit on video-only files. libfdk_aac needs a custom FFmpeg build.</p>
+            <p class="hint" id="encode-audio-hint">Copy is lossless. Omit passes −an and drops the audio. libfdk_aac needs a custom FFmpeg build.</p>
             <div id="encode-audio-mode-row" class="field" hidden>
               <span>Mode</span>
               <div class="check-row">
@@ -293,7 +293,7 @@
             <li>Copy the filter graph, or the full command, and run it in a shell.</li>
           </ol>
           <p class="hint">To reuse the logo on another clip, drop a new still on the Frame strip at the top of the stage, or onto the Frame fieldset. Same W×H keeps placement. Hold Shift to drop a frame anywhere on the stage.</p>
-          <p class="hint">This page does not run FFmpeg. Use audio omit when the source has no audio. libfdk_aac needs a custom build. Do not add CLI <code>-loop 1</code> or <code>-shortest</code>.</p>
+          <p class="hint">This page does not run FFmpeg. Audio omit passes <code>-an</code> and drops the audio. libfdk_aac needs a custom build. Do not add CLI <code>-loop 1</code> or <code>-shortest</code>.</p>
         </div>
         <div id="panel-about" hidden data-modal-panel="about">
           <p>Drop a frame. Place the logo. Copy a filter. This page never runs FFmpeg, never uploads files, and works from <code>file://</code> or a static server.</p>
@@ -318,7 +318,7 @@
   </dialog>
 
   <script src="js/state.js?v=3"></script>
-  <script src="js/ffmpeg.js?v=4"></script>
+  <script src="js/ffmpeg.js?v=5"></script>
   <script src="js/preview.js?v=2"></script>
   <script src="js/modal.js?v=1"></script>
   <script src="js/main.js?v=3"></script>

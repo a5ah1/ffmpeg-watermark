@@ -8,7 +8,7 @@ Encode settings (CRF, preset, tune, source-fps keyint, in/out, audio, metadata) 
 
 - The source-fps hint does **not** change output frame rate. It only sets `keyint=10×fps` and `aq-mode=2`.
 - In/out points (`-ss` / `-to`) apply to the video input only. They are a fast input seek, not frame-accurate.
-- Audio default is **copy**. Choose **omit** when the source has no audio. Native `aac` VBR uses `-q:a` (0.1–2, experimental). `libfdk_aac` VBR uses `-vbr` 1–5 and needs a custom FFmpeg build. CBR is `-b:a` for either codec.
+- Audio default is **copy**. **Omit** passes `-an` and drops the audio. Native `aac` VBR uses `-q:a` (0.1–2, experimental). `libfdk_aac` VBR uses `-vbr` 1–5 and needs a custom FFmpeg build. CBR is `-b:a` for either codec.
 - Metadata strip/title/description/comment/year are optional and apply to the output file.
 - Do **not** add CLI `-loop 1` or CLI `-shortest`. A still second input is held for the whole video by overlay `repeatlast=1`.
 - Non-normal blend modes use an in-graph `loop=loop=-1:size=1` plus `shortest=1` on `blend`, `alphamerge`, and the final `overlay`. Those are filter options, not input flags. Do **not** add CLI `-loop 1` or CLI `-shortest`. If a blend encode hangs on the last frame, the graph is missing `shortest=1` on `alphamerge`/`overlay` (the looped mask never EOFs; default framesync repeats the last mix). Input `-ss`/`-to` (Encode settings) already EOF the video input; overlay `shortest=1` honors that.

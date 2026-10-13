@@ -90,7 +90,7 @@ Always on the command: `-c:v libx264 -crf N -preset P -pix_fmt yuv420p`. No `pla
 | --- | --- |
 | `-ss` / `-to` | Immediately before the **video** `-i` only. `formatTime`: trim, `;` → `:`. Unquoted. Input seek, not frame-accurate. |
 | `fpsPreset` | `""` / 24 / 25 / 30 / 50 / 60. Emits `-x264-params "keyint={10×fps}:aq-mode=2"` only. Not an output frame rate. |
-| Audio | `copy` → `-c:a copy` (default). `none` → omit. `aac` VBR → `-q:a` 0.1–2 (default 2, experimental). `libfdk_aac` VBR → `-vbr` 1–5 (default 3). CBR either codec → `-b:a` (default `192k`). `libfdk_aac` needs a custom FFmpeg build. |
+| Audio | `copy` → `-c:a copy` (default). `none` → `-an`. `aac` VBR → `-q:a` 0.1–2 (default 2, experimental). `libfdk_aac` VBR → `-vbr` 1–5 (default 3). CBR either codec → `-b:a` (default `192k`). `libfdk_aac` needs a custom FFmpeg build. |
 | Metadata | After audio. Optional `-map_metadata -1` plus `-metadata title\|description\|comment\|year=`. Empty fields omitted. Values via `quoteArg`. |
 
 Default command:
